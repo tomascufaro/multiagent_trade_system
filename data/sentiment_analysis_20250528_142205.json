@@ -1,0 +1,48 @@
+{
+  "articles_analyzed": [
+    {
+      "article_id": 45640709,
+      "headline": "Telegram Raises $1.5B In Bond Sale Despite CEO's Legal Battle In France",
+      "sentiment": "bullish",
+      "sentiment_score": 0.2,
+      "confidence": 0.6,
+      "summary": "The news of Telegram raising significant funds via bonds indicates investor confidence and positivity towards its financial strategy, despite ongoing legal issues involving its CEO."
+    },
+    {
+      "article_id": 45640667,
+      "headline": "Nvidia Supplier ASML Loses Over $130 Billion In Market Cap Amid China Export Curbs, Trump Tariff Uncertainty",
+      "sentiment": "bearish",
+      "sentiment_score": -0.7,
+      "confidence": 0.8,
+      "summary": "The article highlights substantial negative market sentiment towards ASML amid export restrictions to China and tariff uncertainties, leading to a significant decline in its market valuation."
+    },
+    {
+      "article_id": 45640639,
+      "headline": "General Motors To Invest $888 Million In NY V-8 Engine Plant Despite Surge In EV Market Share",
+      "sentiment": "bullish",
+      "sentiment_score": 0.2,
+      "confidence": 0.75,
+      "summary": "The article indicates GM's significant investment in traditional engine manufacturing amid a rising electric vehicle market, suggesting cautious optimism with a focus on legacy technology."
+    },
+    {
+      "article_id": 45640414,
+      "headline": "Taiwan Semiconductor To Build Chip Design Center In Germany: Report",
+      "sentiment": "bullish",
+      "sentiment_score": 0.7,
+      "confidence": 0.8,
+      "summary": "Taiwan Semiconductor is expanding its global presence by establishing a new chip design center in Germany and constructing a $10 billion manufacturing plant, reflecting positive growth prospects and investor confidence."
+    },
+    {
+      "article_id": 45640179,
+      "headline": "Supreme Court Rejects Appeal, Allows Rio Tinto Mine To Proceed On Tonto Forest Sacred Land",
+      "sentiment": "bearish",
+      "sentiment_score": -0.6,
+      "confidence": 0.8,
+      "summary": "The Supreme Court's decision to allow the copper mine project to proceed on sacred land is viewed negatively due to environmental, cultural, and social concerns associated with the Sacred Oak Flat site."
+    }
+  ],
+  "overall_sentiment": "bearish",
+  "overall_sentiment_score": -0.05599999999999999,
+  "overall_confidence": 0.75,
+  "summary": "Analyzed 5 articles, 5 successful"
+}
