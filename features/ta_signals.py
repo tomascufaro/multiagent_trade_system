@@ -1,17 +1,27 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Any
+import yaml
+import os
 
 
 class TechnicalAnalysis:
     def __init__(self):
-        # Default values instead of config
-        self.rsi_period = 14
-        self.macd_fast = 12
-        self.macd_slow = 26
-        self.macd_signal = 9
-        self.ema_short = 20
-        self.ema_long = 50
+        # Load settings from yaml file
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "config", "settings.yaml"
+        )
+        with open(config_path, "r") as f:
+            settings = yaml.safe_load(f)
+
+        # Get technical analysis parameters from settings
+        ta_settings = settings["technical"]
+        self.rsi_period = ta_settings["rsi"]["period"]
+        self.macd_fast = ta_settings["macd"]["fast_period"]
+        self.macd_slow = ta_settings["macd"]["slow_period"]
+        self.macd_signal = ta_settings["macd"]["signal_period"]
+        self.ema_short = ta_settings["ema"]["short_period"]
+        self.ema_long = ta_settings["ema"]["long_period"]
 
     def calculate_rsi(self, prices: list, period: int = None) -> float:
         """Calculate Relative Strength Index."""
