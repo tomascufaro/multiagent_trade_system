@@ -1,0 +1,66 @@
+{
+  "debate_result": {
+    "bull_case": {
+      "arguments": [
+        "RSI is unavailable (NaN), but MACD shows bullish momentum with MACD > signal and positive histogram,",
+        "EMA crossover is positive and indicating a bullish trend",
+        "Sentiment is explicitly bullish with high confidence (0.8)"
+      ],
+      "conviction": 0.85,
+      "recommendation": "BUY"
+    },
+    "bear_case": {
+      "arguments": [
+        "RSI is unavailable (NaN), but MACD shows bullish momentum with MACD > signal and positive histogram,",
+        "EMA crossover is positive and indicating a bullish trend",
+        "Sentiment is explicitly bullish with high confidence (0.8)"
+      ],
+      "conviction": 0.85,
+      "recommendation": "BUY"
+    },
+    "market_bias": 0.0,
+    "summary": "CrewAI analysis shows market bias is neutral with bull conviction at 0.85 and bear conviction at 0.85",
+    "crew_analysis": true
+  },
+  "decision_result": {
+    "action": "BUY",
+    "confidence": 0.75,
+    "reason": "Strong bullish conviction",
+    "debate_summary": "CrewAI analysis shows market bias is strongly bullish with bull conviction at 0.85 and bear conviction at 0.10",
+    "prices": [
+      108825.55,
+      108901.07,
+      108858.975,
+      109076.9725,
+      108844.105
+    ],
+    "sentiment_data": {
+      "sentiment": "bullish",
+      "confidence": 0.8,
+      "summary": "Analysis from 5 recent articles"
+    },
+    "debate_results": {
+      "bull_case": {
+        "arguments": [
+          "RSI: NaN (data insufficient for RSI calculation)",
+          "MACD: MACD=21.12, Signal=9.88, Histogram=11.24 (bullish momentum indicated)",
+          "EMA: Short EMA=108856.91, Long EMA=108839.59, Crossover=17.33 (bullish crossover)"
+        ],
+        "conviction": 0.85,
+        "recommendation": "BUY"
+      },
+      "bear_case": {
+        "arguments": [
+          "RSI: NaN (data insufficient for RSI calculation)",
+          "MACD: MACD=21.12, Signal=9.88, Histogram=11.24 (bullish momentum indicated)",
+          "EMA: Short EMA=108856.91, Long EMA=108839.59, Crossover=17.33 (bullish crossover)"
+        ],
+        "conviction": 0.1,
+        "recommendation": "HOLD"
+      },
+      "market_bias": 0.75,
+      "summary": "CrewAI analysis shows market bias is strongly bullish with bull conviction at 0.85 and bear conviction at 0.10",
+      "crew_analysis": true
+    }
+  }
+}

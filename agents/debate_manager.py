@@ -2,7 +2,7 @@ from typing import Dict, Any, List
 from .trading_crew import TradingCrew
 
 class DebateManager:
-    def __init__(self):
+    def __init__(self, config_path: str = None):
         """Initialize the debate manager with CrewAI trading crew."""
         self.trading_crew = TradingCrew()
 

@@ -1,8 +1,14 @@
 from typing import Dict, Any, List
 import json
+import sys
+import os
 from crewai import Crew, Process
 from .bull_agent import BullAgent
 from .bear_agent import BearAgent
+
+# Add utils directory to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
+from models import MarketAnalysis, AgentAnalysis
 
 class TradingCrew:
     def __init__(self):
@@ -39,37 +45,32 @@ class TradingCrew:
         # Execute the crew
         results = self.crew.kickoff()
         
-        # Parse results
+        # Parse results - CrewAI returns Pydantic objects when output_pydantic is used
         try:
-            # Results should be a list of task outputs
-            bull_result = json.loads(str(results.tasks_output[0]))
-            bear_result = json.loads(str(results.tasks_output[1]))
-        except (json.JSONDecodeError, IndexError, AttributeError) as e:
+            bull_result = results.tasks_output[0].pydantic
+            bear_result = results.tasks_output[1].pydantic
+            
+            if not isinstance(bull_result, AgentAnalysis) or not isinstance(bear_result, AgentAnalysis):
+                # Fallback to JSON parsing if Pydantic parsing fails
+                bull_result = AgentAnalysis.parse_raw(str(results.tasks_output[0]))
+                bear_result = AgentAnalysis.parse_raw(str(results.tasks_output[1]))
+                
+        except Exception as e:
             raise RuntimeError(f"Failed to parse CrewAI results: {e}")  
         
         # Calculate market bias
-        bull_conviction = bull_result.get('conviction', 0.0)
-        bear_conviction = bear_result.get('conviction', 0.0)
-        market_bias = bull_conviction - bear_conviction
+        market_bias = bull_result.conviction - bear_result.conviction
         
-        return {
-            'bull_case': {
-                'arguments': bull_result.get('arguments', []),
-                'conviction': bull_conviction,
-                'recommendation': bull_result.get('recommendation', 'HOLD')
-            },
-            'bear_case': {
-                'arguments': bear_result.get('arguments', []),
-                'conviction': bear_conviction,
-                'recommendation': bear_result.get('recommendation', 'HOLD')
-            },
-            'market_bias': market_bias,
-            'summary': self._generate_summary(bull_result, bear_result, market_bias),
-            'crew_analysis': True  # Flag to indicate this used CrewAI
-        }
+        return MarketAnalysis(
+            bull_case=bull_result,
+            bear_case=bear_result,
+            market_bias=market_bias,
+            summary=self._generate_summary(bull_result, bear_result, market_bias),
+            crew_analysis=True
+        ).dict()
     
-    def _generate_summary(self, bull_analysis: Dict[str, Any], 
-                         bear_analysis: Dict[str, Any], 
+    def _generate_summary(self, bull_analysis: AgentAnalysis, 
+                         bear_analysis: AgentAnalysis, 
                          market_bias: float) -> str:
         """Generate a summary of the crew analysis."""
         if market_bias > 0.3:
@@ -83,8 +84,5 @@ class TradingCrew:
         else:
             bias = "neutral"
 
-        bull_conviction = bull_analysis.get('conviction', 0.0)
-        bear_conviction = bear_analysis.get('conviction', 0.0)
-        
-        return f"CrewAI analysis shows market bias is {bias} with bull conviction at {bull_conviction:.2f} " \
-               f"and bear conviction at {bear_conviction:.2f}"
+        return f"CrewAI analysis shows market bias is {bias} with bull conviction at {bull_analysis.conviction:.2f} " \
+               f"and bear conviction at {bear_analysis.conviction:.2f}"

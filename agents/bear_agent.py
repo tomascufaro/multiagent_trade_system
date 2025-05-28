@@ -6,6 +6,10 @@ from crewai.tools import tool
 import sys
 import os
 
+# Add utils directory to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
+from models import AgentAnalysis
+
 # Add the features directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'features'))
 from ta_signals import TechnicalAnalysis
@@ -27,7 +31,7 @@ def get_technical_signals(prices: str) -> str:
         signals = ta.get_signals(price_list)
         return json.dumps(signals)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        raise Exception(f"Technical analysis failed: {str(e)}")
 
 class BearAgent:
     def __init__(self):
@@ -41,7 +45,8 @@ class BearAgent:
             tools=[get_technical_signals],
             verbose=True,
             allow_delegation=False,
-            max_iter=10
+            max_iter=5,
+            llm="gpt-4.1-nano"
         )
 
     def create_analysis_task(self, prices: list, sentiment_data: Dict[str, Any]) -> Task:
@@ -63,8 +68,9 @@ class BearAgent:
             4. Calculate conviction level (0.0 to 1.0) based on signal strength
             5. Provide SELL recommendation if conviction > 0.5, otherwise HOLD
             
-            Return a JSON with: arguments (list), conviction (float), recommendation (string)""",
+            Return ONLY valid JSON with: arguments (list), conviction (float), recommendation (string)""",
             agent=self.agent,
-            expected_output="JSON formatted analysis with bearish arguments, conviction level, and recommendation"
+            expected_output="JSON formatted analysis with bearish arguments, conviction level, and recommendation",
+            output_pydantic=AgentAnalysis
         )
 

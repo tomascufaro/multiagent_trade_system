@@ -1,0 +1,91 @@
+{
+  "crew_result": {
+    "bull_case": {
+      "arguments": [
+        "MACD shows a strong bullish momentum with histogram > 0 and MACD > signal",
+        "EMA crossover is positive indicating recent bullish trend",
+        "Sentiment is bullish with 0.8 confidence"
+      ],
+      "conviction": 0.8,
+      "recommendation": "BUY"
+    },
+    "bear_case": {
+      "arguments": [
+        "MACD indicates bullish momentum with a positive histogram and MACD above the signal line.",
+        "EMA crossover is positive, indicating a recent bullish trend.",
+        "Sentiment is bullish with high confidence.",
+        "These indicators do not support a short position.",
+        "Overall market appears bullish."
+      ],
+      "conviction": 0.3,
+      "recommendation": "HOLD"
+    },
+    "market_bias": 0.5,
+    "summary": "CrewAI analysis shows market bias is strongly bullish with bull conviction at 0.80 and bear conviction at 0.30",
+    "crew_analysis": true
+  },
+  "debate_result": {
+    "bull_case": {
+      "arguments": [
+        "MACD histogram > 0 and MACD > signal",
+        "EMA crossover > 0",
+        "positive market sentiment"
+      ],
+      "conviction": 0.85,
+      "recommendation": "BUY"
+    },
+    "bear_case": {
+      "arguments": [
+        "The current price is slightly above the previous prices, indicating a potential upward momentum.",
+        "Short-term moving averages are crossing above long-term moving averages, signaling a bullish trend.",
+        "The RSI (if calculated) is trending towards overbought levels, which may suggest a potential reversal or continuation of the upward trend."
+      ],
+      "conviction": 0.75,
+      "recommendation": "BUY"
+    },
+    "market_bias": 0.09999999999999998,
+    "summary": "CrewAI analysis shows market bias is slightly bullish with bull conviction at 0.85 and bear conviction at 0.75",
+    "crew_analysis": true
+  },
+  "decision_result": {
+    "action": "HOLD",
+    "confidence": 0,
+    "reason": "Insufficient conviction for trade",
+    "debate_summary": "CrewAI analysis shows market bias is neutral with bull conviction at 0.80 and bear conviction at 0.80",
+    "prices": [
+      108825.55,
+      108901.07,
+      108858.975,
+      109076.9725,
+      108844.105
+    ],
+    "sentiment_data": {
+      "sentiment": "bullish",
+      "confidence": 0.8,
+      "summary": "Analysis from 5 recent articles"
+    },
+    "debate_results": {
+      "bull_case": {
+        "arguments": [
+          "RSI is not available (NaN), so oversold conditions cannot be confirmed.",
+          "MACD histogram is positive (11.24), MACD is above the signal line (21.12 > 9.88), indicating bullish momentum.",
+          "EMA crossover is positive (17.33), suggesting a bullish trend."
+        ],
+        "conviction": 0.8,
+        "recommendation": "BUY"
+      },
+      "bear_case": {
+        "arguments": [
+          "RSI data is unavailable, so overbought conditions cannot be confirmed.",
+          "MACD histogram is positive (11.24), MACD is above the signal line (21.12 > 9.88), indicating bullish momentum.",
+          "EMA crossover is positive (17.33), suggesting a bullish trend."
+        ],
+        "conviction": 0.8,
+        "recommendation": "HOLD"
+      },
+      "market_bias": 0.0,
+      "summary": "CrewAI analysis shows market bias is neutral with bull conviction at 0.80 and bear conviction at 0.80",
+      "crew_analysis": true
+    }
+  }
+}
