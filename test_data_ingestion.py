@@ -7,6 +7,7 @@ sys.path.append('.')
 
 from data_ingestion.news_feed import NewsFeed
 from data_ingestion.price_feed import PriceFeed
+from data_ingestion.account_status import AccountStatus
 
 def test_news_feed():
     """Test the news feed functionality."""
@@ -64,6 +65,23 @@ def test_price_feed():
     except Exception as e:
         print(f"✗ PriceFeed error: {e}")
 
+def test_account_status():
+    """Test the account status ingestion functionality."""
+    print("\nTesting AccountStatus...")
+    try:
+        account_status = AccountStatus()
+        print("✓ AccountStatus initialized successfully")
+        print("Fetching account status...")
+        status = account_status.get_status()
+        if status:
+            print("✓ Retrieved account status:")
+            for k, v in status.items():
+                print(f"  {k}: {v}")
+        else:
+            print("✗ Failed to get account status or no data returned")
+    except Exception as e:
+        print(f"✗ AccountStatus error: {e}")
+
 if __name__ == "__main__":
     print("Testing Data Ingestion Module\n" + "="*40)
     
@@ -75,3 +93,4 @@ if __name__ == "__main__":
     
     test_news_feed()
     test_price_feed()
+    test_account_status()

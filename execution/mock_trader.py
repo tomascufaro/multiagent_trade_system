@@ -1,23 +1,35 @@
+"""
+mock_trader.py - Handles trade execution for the trading bot by placing real (paper) orders with Alpaca.
+
+This class is responsible for sending trade orders to Alpaca's /v2/orders endpoint based on trade decisions
+from the trading logic. It loads API credentials, builds the order payload, sends the request, and saves the
+order response for record-keeping.
+"""
 import json
 from datetime import datetime
 from typing import Dict, Any
 import yaml
 import os
+import requests
+from dotenv import load_dotenv
 
 class MockTrader:
+    """
+    MockTrader places real (paper) orders with Alpaca based on trade decisions from the trading bot.
+    It loads API credentials, builds the order payload, sends the order, and saves the response.
+    """
     def __init__(self, config_path: str = '../config/settings.yaml'):
+        """
+        Initialize MockTrader by loading API credentials and initial capital from config.
+        Creates a directory for saving trade records.
+        """
+        load_dotenv()
+        self.api_key = os.getenv("APCA_API_KEY_ID")
+        self.secret_key = os.getenv("APCA_API_SECRET_KEY")
+        self.base_url = "https://paper-api.alpaca.markets/v2/orders"
         with open(config_path, 'r') as file:
             config = yaml.safe_load(file)
             self.initial_capital = config['trading']['initial_capital']
-        
-        self.portfolio = {
-            'cash': self.initial_capital,
-            'positions': {},
-            'total_value': self.initial_capital,
-            'trades': []
-        }
-        
-        # Create trades directory if it doesn't exist
         os.makedirs('trades', exist_ok=True)
 
     def execute_trade(self, 
@@ -25,88 +37,55 @@ class MockTrader:
                      symbol: str, 
                      current_price: float) -> Dict[str, Any]:
         """
-        Execute a mock trade based on the decision.
+        Place a real order with Alpaca based on the trade decision.
         """
         if trade_decision['action'] == 'HOLD':
             return {'status': 'no_action', 'message': 'Holding position'}
 
-        trade_result = {
-            'timestamp': datetime.now().isoformat(),
-            'symbol': symbol,
-            'action': trade_decision['action'],
-            'price': current_price,
-            'size': 0,
-            'value': 0,
-            'reason': trade_decision['reason']
+        # Map your decision to Alpaca's order params
+        side = trade_decision['action'].lower()  # 'buy' or 'sell'
+        qty = str(trade_decision.get('size', 1))  # Alpaca expects string
+        order_type = trade_decision.get('order_type', 'market')  # default to market
+        time_in_force = trade_decision.get('time_in_force', 'day')  # default to day
+
+        order_payload = {
+            "symbol": symbol,
+            "qty": qty,
+            "side": side,
+            "type": order_type,
+            "time_in_force": time_in_force
+        }
+        # Add limit_price, stop_price, etc. if needed for advanced orders
+        if 'limit_price' in trade_decision:
+            order_payload['limit_price'] = str(trade_decision['limit_price'])
+        if 'stop_price' in trade_decision:
+            order_payload['stop_price'] = str(trade_decision['stop_price'])
+        if 'notional' in trade_decision:
+            order_payload['notional'] = str(trade_decision['notional'])
+
+        headers = {
+            "APCA-API-KEY-ID": self.api_key,
+            "APCA-API-SECRET-KEY": self.secret_key,
+            "Content-Type": "application/json"
         }
 
-        if trade_decision['action'] in ['BUY', 'SELL']:
-            # Calculate trade size based on available cash
-            max_size = self.portfolio['cash'] / current_price
-            trade_size = min(max_size, trade_decision.get('size', max_size))
-            
-            trade_result['size'] = trade_size
-            trade_result['value'] = trade_size * current_price
-
-            # Update portfolio
-            if trade_decision['action'] == 'BUY':
-                self.portfolio['cash'] -= trade_result['value']
-                self.portfolio['positions'][symbol] = {
-                    'side': 'LONG',
-                    'size': trade_size,
-                    'entry_price': current_price
-                }
-            else:  # SELL
-                self.portfolio['cash'] += trade_result['value']
-                self.portfolio['positions'][symbol] = {
-                    'side': 'SHORT',
-                    'size': trade_size,
-                    'entry_price': current_price
-                }
-
-        elif trade_decision['action'] == 'CLOSE':
-            if symbol in self.portfolio['positions']:
-                position = self.portfolio['positions'][symbol]
-                trade_result['size'] = position['size']
-                trade_result['value'] = position['size'] * current_price
-                
-                if position['side'] == 'LONG':
-                    self.portfolio['cash'] += trade_result['value']
-                else:  # SHORT
-                    self.portfolio['cash'] -= trade_result['value']
-                
-                del self.portfolio['positions'][symbol]
-
-        # Record trade
-        self.portfolio['trades'].append(trade_result)
-        self._save_trade(trade_result)
-        
-        # Update portfolio value
-        self._update_portfolio_value(current_price)
-        
-        return trade_result
-
-    def _update_portfolio_value(self, current_price: float):
-        """Update the total portfolio value."""
-        position_value = sum(
-            pos['size'] * current_price 
-            for pos in self.portfolio['positions'].values()
-        )
-        self.portfolio['total_value'] = self.portfolio['cash'] + position_value
+        try:
+            # Send the order to Alpaca
+            response = requests.post(self.base_url, headers=headers, json=order_payload)
+            response.raise_for_status()
+            order_result = response.json()
+            # Save the order details to a file for record-keeping
+            self._save_trade(order_result)
+            return {"status": "submitted", "order": order_result}
+        except requests.RequestException as e:
+            error_response = getattr(e, 'response', None)
+            error_content = error_response.text if error_response is not None else str(e)
+            return {"status": "error", "message": str(e), "response": error_content}
 
     def _save_trade(self, trade: Dict[str, Any]):
-        """Save trade to a JSON file."""
+        """
+        Save the trade/order details to a JSON file in the 'trades' directory.
+        """
         filename = f"trades/trade_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(filename, 'w') as f:
             json.dump(trade, f, indent=2)
-
-    def get_portfolio_status(self) -> Dict[str, Any]:
-        """Get current portfolio status."""
-        return {
-            'total_value': self.portfolio['total_value'],
-            'cash': self.portfolio['cash'],
-            'positions': self.portfolio['positions'],
-            'returns': (self.portfolio['total_value'] - self.initial_capital) 
-                      / self.initial_capital,
-            'trade_count': len(self.portfolio['trades'])
-        }
