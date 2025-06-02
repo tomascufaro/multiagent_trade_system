@@ -110,10 +110,10 @@ class RiskManager:
                       trade: Dict[str, Any], 
                       portfolio: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Validate a potential trade against risk parameters, such as max drawdown.
+        Validate a potential trade against risk parameters, such as max drawdown, stop loss, and take profit.
 
         Args:
-            trade (dict): Dictionary representing the trade to validate.
+            trade (dict): Dictionary representing the trade to validate. Should include 'current_position' and 'current_price' if available.
             portfolio (dict): Dictionary containing portfolio information, including 'drawdown'.
 
         Returns:
@@ -135,6 +135,21 @@ class RiskManager:
             validation['valid'] = False
             validation['reason'] = f'Maximum drawdown of {self.max_drawdown*100}% exceeded'
             return validation
+
+        # Check stop loss and take profit if current position and price are provided
+        current_position = trade.get('current_position')
+        current_price = trade.get('current_price')
+        if current_position and current_price is not None:
+            if self.check_stop_loss(current_position, current_price):
+                print(f"[RiskManager] Trade rejected: Stop loss triggered.")
+                validation['valid'] = False
+                validation['reason'] = 'Stop loss triggered for current position.'
+                return validation
+            if self.check_take_profit(current_position, current_price):
+                print(f"[RiskManager] Trade rejected: Take profit triggered.")
+                validation['valid'] = False
+                validation['reason'] = 'Take profit triggered for current position.'
+                return validation
 
         # Additional validation rules can be added here
 
@@ -168,7 +183,7 @@ if __name__ == "__main__":
     equity = float(account_data.get('equity', 0)) if account_data else 0
     cash = float(account_data.get('cash', 0)) if account_data else 0
     initial_equity = cash + equity if (cash + equity) > 0 else 1
-    current_drawdown = max(0, (initial_equity - equity) / initial_equity) if initial_equity > 0 else 0
+    current_drawdown =0
 
     portfolio_status = {
         'cash': cash,

@@ -1,5 +1,6 @@
 import sys
 import os
+import yaml
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from risk_control.risk_manager import RiskManager
 from utils.data_saver import load_latest_data, save_data
@@ -7,6 +8,11 @@ from utils.data_saver import load_latest_data, save_data
 # Load latest account status and open positions using data_saver
 account_data = load_latest_data('account_status')
 positions_data = load_latest_data('open_positions') or []
+
+# Load initial equity from config
+with open('config/settings.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+initial_equity = float(config['trading']['initial_capital'])
 
 # Example symbol to test
 symbol = 'AAPL'
@@ -25,7 +31,6 @@ for pos in positions_data:
 
 equity = float(account_data.get('equity', 0)) if account_data else 0
 cash = float(account_data.get('cash', 0)) if account_data else 0
-initial_equity = cash + equity if (cash + equity) > 0 else 1
 current_drawdown = max(0, (initial_equity - equity) / initial_equity) if initial_equity > 0 else 0
 
 portfolio_status = {
