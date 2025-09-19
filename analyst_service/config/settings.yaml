@@ -43,3 +43,11 @@ risk:
       - SOL/USD
       - ADA/USD
     risk_tolerance: moderate   # Can be: conservative, moderate, aggressive
+    
+    # Watchlist - stocks to monitor for potential investment
+    watchlist:
+      - NVDA    # NVIDIA - AI/semiconductor leader
+      - GOOGL   # Google - Tech giant
+      - AMD     # AMD - Semiconductor competitor
+      - TSLA    # Tesla - EV leader
+      - META    # Meta - Social media/VR

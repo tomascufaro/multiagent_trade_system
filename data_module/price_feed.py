@@ -9,7 +9,8 @@ class PriceFeed:
         load_dotenv()
         self.api_key = os.getenv('APCA_API_KEY_ID')
         self.secret_key = os.getenv('APCA_API_SECRET_KEY')
-        self.base_url = "https://data.alpaca.markets/v1beta3/crypto/us/bars"
+        # Use stock API only - much simpler and more reliable
+        self.base_url = "https://data.alpaca.markets/v2/stocks/bars"
 
     def get_current_price(self, symbol: str) -> float:
         """Get the current price for a given symbol by fetching latest bar."""

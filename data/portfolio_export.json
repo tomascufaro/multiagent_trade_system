@@ -1,0 +1,170 @@
+{
+  "metadata": {
+    "export_date": "2025-09-19T21:27:34.011776",
+    "total_records": {
+      "portfolio_snapshots": 2,
+      "positions": 8,
+      "trades": 0
+    }
+  },
+  "portfolio_snapshots": [
+    {
+      "id": 1,
+      "timestamp": "2025-09-19T21:11:03.113739",
+      "account_id": "6be4d920-6015-4900-8506-354368617eea",
+      "total_equity": 100018.97,
+      "cash": 98362.9,
+      "invested_capital": 1656.070000000007,
+      "unrealized_pnl": 19.61351794298014,
+      "realized_pnl": 0.0,
+      "total_pnl": 19.61351794298014,
+      "day_change": 0.0,
+      "day_change_pct": 0.0
+    },
+    {
+      "id": 2,
+      "timestamp": "2025-09-19T21:27:33.992756",
+      "account_id": "6be4d920-6015-4900-8506-354368617eea",
+      "total_equity": 100020.95,
+      "cash": 98362.9,
+      "invested_capital": 1658.050000000003,
+      "unrealized_pnl": 21.68851794298007,
+      "realized_pnl": 0.0,
+      "total_pnl": 21.68851794298007,
+      "day_change": 0.0,
+      "day_change_pct": 0.0
+    }
+  ],
+  "positions": [
+    {
+      "id": 1,
+      "timestamp": "2025-09-19T21:11:03.116374",
+      "symbol": "AWK",
+      "side": "LONG",
+      "quantity": 5.0,
+      "avg_entry_price": 134.93,
+      "current_price": null,
+      "market_value": 676.15,
+      "cost_basis": 674.6500000000001,
+      "unrealized_pnl": 1.4999999999998863,
+      "unrealized_pnl_pct": 0.2223375083376397,
+      "position_size_pct": 0.6760217586723798,
+      "days_held": 1
+    },
+    {
+      "id": 2,
+      "timestamp": "2025-09-19T21:11:03.116374",
+      "symbol": "BTCUSD",
+      "side": "LONG",
+      "quantity": 0.002734335,
+      "avg_entry_price": 107241.365471685,
+      "current_price": null,
+      "market_value": 315.572337,
+      "cost_basis": 293.2338190570198,
+      "unrealized_pnl": 22.338517942980218,
+      "unrealized_pnl_pct": 7.617988271208397,
+      "position_size_pct": 0.3155124842817318,
+      "days_held": 1
+    },
+    {
+      "id": 3,
+      "timestamp": "2025-09-19T21:11:03.116374",
+      "symbol": "MRVL",
+      "side": "LONG",
+      "quantity": 5.0,
+      "avg_entry_price": 74.08,
+      "current_price": null,
+      "market_value": 366.655,
+      "cost_basis": 370.4,
+      "unrealized_pnl": -3.7450000000000045,
+      "unrealized_pnl_pct": -1.0110691144708437,
+      "position_size_pct": 0.3665854587384773,
+      "days_held": 1
+    },
+    {
+      "id": 4,
+      "timestamp": "2025-09-19T21:11:03.116374",
+      "symbol": "WTRG",
+      "side": "LONG",
+      "quantity": 8.0,
+      "avg_entry_price": 37.26,
+      "current_price": null,
+      "market_value": 297.6,
+      "cost_basis": 298.08,
+      "unrealized_pnl": -0.47999999999996135,
+      "unrealized_pnl_pct": -0.16103059581319154,
+      "position_size_pct": 0.2975435559874292,
+      "days_held": 1
+    },
+    {
+      "id": 5,
+      "timestamp": "2025-09-19T21:27:33.996838",
+      "symbol": "AWK",
+      "side": "LONG",
+      "quantity": 5.0,
+      "avg_entry_price": 134.93,
+      "current_price": null,
+      "market_value": 676.05,
+      "cost_basis": 674.6500000000001,
+      "unrealized_pnl": 1.3999999999998636,
+      "unrealized_pnl_pct": 0.20751500778179252,
+      "position_size_pct": 0.6759083971907884,
+      "days_held": 1
+    },
+    {
+      "id": 6,
+      "timestamp": "2025-09-19T21:27:33.996838",
+      "symbol": "BTCUSD",
+      "side": "LONG",
+      "quantity": 0.002734335,
+      "avg_entry_price": 107241.365471685,
+      "current_price": null,
+      "market_value": 315.572337,
+      "cost_basis": 293.2338190570198,
+      "unrealized_pnl": 22.338517942980218,
+      "unrealized_pnl_pct": 7.617988271208397,
+      "position_size_pct": 0.3155062384430462,
+      "days_held": 1
+    },
+    {
+      "id": 7,
+      "timestamp": "2025-09-19T21:27:33.996838",
+      "symbol": "MRVL",
+      "side": "LONG",
+      "quantity": 5.0,
+      "avg_entry_price": 74.08,
+      "current_price": null,
+      "market_value": 369.15,
+      "cost_basis": 370.4,
+      "unrealized_pnl": -1.25,
+      "unrealized_pnl_pct": -0.33747300215982723,
+      "position_size_pct": 0.36907267927369214,
+      "days_held": 1
+    },
+    {
+      "id": 8,
+      "timestamp": "2025-09-19T21:27:33.996838",
+      "symbol": "WTRG",
+      "side": "LONG",
+      "quantity": 8.0,
+      "avg_entry_price": 37.26,
+      "current_price": null,
+      "market_value": 297.28,
+      "cost_basis": 298.08,
+      "unrealized_pnl": -0.8000000000000114,
+      "unrealized_pnl_pct": -0.2683843263553447,
+      "position_size_pct": 0.29721773288496056,
+      "days_held": 1
+    }
+  ],
+  "trades": [],
+  "performance_metrics": {
+    "total_return": 1.97962446524258e-05,
+    "total_return_pct": 0.00197962446524258,
+    "sharpe_ratio": 0,
+    "max_drawdown": 0.0,
+    "volatility": NaN,
+    "total_trades": 0,
+    "win_rate": 0.0
+  }
+}
