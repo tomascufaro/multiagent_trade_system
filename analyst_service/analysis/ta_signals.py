@@ -6,11 +6,8 @@ import os
 
 
 class TechnicalAnalysis:
-    def __init__(self):
+    def __init__(self, config_path='analyst_service/config/settings.yaml'):
         # Load settings from yaml file
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "config", "settings.yaml"
-        )
         with open(config_path, "r") as f:
             settings = yaml.safe_load(f)
 

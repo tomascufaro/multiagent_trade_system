@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 
 class SentimentAgent:
-    def __init__(self):
+    def __init__(self, config_path='analyst_service/config/settings.yaml'):
         # Load environment variables
         load_dotenv()
 

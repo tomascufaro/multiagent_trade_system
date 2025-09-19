@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 from dotenv import load_dotenv
 
 class PriceFeed:
-    def __init__(self):
+    def __init__(self, config_path='analyst_service/config/settings.yaml'):
         load_dotenv()
         self.api_key = os.getenv('APCA_API_KEY_ID')
         self.secret_key = os.getenv('APCA_API_SECRET_KEY')
