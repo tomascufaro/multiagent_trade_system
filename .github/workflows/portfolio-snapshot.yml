@@ -33,14 +33,24 @@ jobs:
         run: |
           poetry install --only=main --no-root
           
+      - name: Set up MongoDB
+        run: |
+          sudo systemctl start mongod
+
       - name: Run portfolio snapshot
         env:
-          # These get the values from GitHub Secrets
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           poetry run python scripts/daily_snapshot.py
+
+      - name: Collect news
+        env:
+          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+        run: |
+          poetry run python scripts/collect_news.py
           
       - name: Commit and push data
         run: |

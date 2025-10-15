@@ -72,46 +72,23 @@ class NewsFeed:
 
 def main():
     """Test function to run the news feed."""
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from utils.data_saver import save_data
-    
     print("Testing NewsFeed...")
-
     news_feed = NewsFeed()
 
-    # Test general news (no specific symbols)
-    print("\n1. Testing general news:")
-    general_news = news_feed.get_news(limit=5)
-    if general_news:
-        print(f"Found {len(general_news)} articles")
-        for i, article in enumerate(general_news[:2], 1):
-            print(f"\nArticle {i}:")
-            print(f"  Headline: {article['headline']}")
-            print(f"  Source: {article['source']}")
-            print(f"  Symbols: {article['symbols']}")
-            print(f"  Created: {article['created_at']}")
-    else:
-        print("No general news found")
-
     # Test symbol-specific news
-    print("\n2. Testing symbol-specific news (AAPL):")
-    symbol_news = news_feed.get_news(["AAPL"], limit=3)
-    if symbol_news:
-        print(f"Found {len(symbol_news)} AAPL articles")
-        for article in symbol_news:
-            print(f"  - {article['headline'][:100]}...")
-    else:
-        print("No AAPL news found")
-    
-    # Save data
-    data = {
-        'general_news': general_news,
-        'symbol_news': symbol_news
-    }
-    filepath = save_data('news_feed', data)
-    print(f"\nData saved to: {filepath}")
+    test_symbols = ["AAPL", "TSLA", "NVDA"]
+    print(f"\nFetching news for: {', '.join(test_symbols)}")
+
+    for symbol in test_symbols:
+        print(f"\n--- {symbol} ---")
+        news = news_feed.get_news([symbol], limit=2)
+        if news:
+            for i, article in enumerate(news, 1):
+                print(f"{i}. {article['headline'][:100]}...")
+        else:
+            print("No news found")
+
+    print("\n✓ Test completed")
 
 
 if __name__ == "__main__":
