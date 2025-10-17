@@ -32,10 +32,6 @@ jobs:
       - name: Install dependencies
         run: |
           poetry install --only=main --no-root
-          
-      - name: Set up MongoDB
-        run: |
-          sudo systemctl start mongod
 
       - name: Run portfolio snapshot
         env:

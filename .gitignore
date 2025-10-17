@@ -2,3 +2,5 @@
 __pycache__/
 *.py[cod]
 CLAUDE.md
+MIGRATION_PLAN.md
+data/portfolio.db

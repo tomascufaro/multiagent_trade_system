@@ -1,69 +1,51 @@
 """
-Data Manager - Simple data orchestration for analyst service
+Data Manager - Orchestration layer for trading bot data operations
 
-This module provides a unified interface for data access and portfolio tracking.
-It manages the portfolio universe (current, historical, and watchlist assets)
-and provides methods for data retrieval and analysis.
+Coordinates between API clients and data repositories, contains business logic.
 """
-import json
-import sqlite3
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Set, Optional
-from price_feed import PriceFeed
-from news_feed import NewsFeed
-from account_status import AccountStatus
-from open_positions import OpenPositions
-from portfolio_tracker import PortfolioTracker
+import pandas as pd
+from datetime import datetime
+from typing import Dict, List, Any, Set
+
+from .api_clients import PriceFeed, NewsFeed, AccountStatus, OpenPositions
+from .repositories import PortfolioRepository, NewsRepository, UniverseRepository
+
 
 class DataManager:
     """
-    Data Manager for portfolio tracking and analysis.
-    
-    Manages the portfolio universe (current positions, historical assets, and watchlist)
-    and provides unified access to market data, account information, and portfolio tracking.
-    
-    Attributes:
-        price_feed: Price data fetcher for stocks
-        news_feed: News data fetcher for sentiment analysis
-        account_status: Account information fetcher
-        open_positions: Current positions fetcher
-        portfolio_tracker: Portfolio tracking and database manager
-        config_path: Path to configuration file
+    Orchestrates data operations between APIs and database repositories.
+    Contains business logic for portfolio tracking and analysis.
     """
-    
+
     def __init__(self, config_path: str = 'analyst_service/config/settings.yaml'):
-        """
-        Initialize the DataManager with all required components.
-        
-        Args:
-            config_path: Path to the YAML configuration file
-        """
-        self.config_path = config_path
+        # API clients
         self.price_feed = PriceFeed(config_path)
         self.news_feed = NewsFeed(config_path)
         self.account_status = AccountStatus()
         self.open_positions = OpenPositions()
-        self.portfolio_tracker = PortfolioTracker()
-        
-        # Load watchlist from config on initialization
+
+        # Data repositories
+        self.portfolio_repo = PortfolioRepository()
+        self.news_repo = NewsRepository()
+        self.universe_repo = UniverseRepository()
+
+        self.config_path = config_path
         self._load_watchlist_from_config()
-    
-    def get_market_data(self, symbol: str):
-        """Get market data for a symbol"""
-        current_price = self.price_feed.get_current_price(symbol)
-        historical_data = self.price_feed.get_historical_data(symbol)
-        news_data = self.news_feed.get_news([symbol])
-        
+
+    # Market Data Operations
+
+    def get_market_data(self, symbol: str) -> Dict[str, Any]:
+        """Get comprehensive market data for a symbol"""
         return {
             'symbol': symbol,
-            'current_price': current_price,
-            'historical_data': historical_data,
-            'news_data': news_data,
+            'current_price': self.price_feed.get_current_price(symbol),
+            'historical_data': self.price_feed.get_historical_data(symbol),
+            'news_data': self.news_feed.get_news([symbol]),
             'timestamp': datetime.now().isoformat()
         }
-    
-    def get_position(self, symbol: str):
-        """Get current position for symbol"""
+
+    def get_position(self, symbol: str) -> Dict[str, Any]:
+        """Get current position for a symbol"""
         positions = self.open_positions.get_positions()
         for pos in positions:
             if pos.get('symbol') == symbol:
@@ -75,249 +57,183 @@ class DataManager:
                     'market_value': float(pos.get('market_value', 0))
                 }
         return None
-    
-    def get_portfolio_summary(self):
-        """Get portfolio summary"""
+
+    def get_portfolio_summary(self) -> Dict[str, Any]:
+        """Get current portfolio summary"""
         account_data = self.account_status.get_status()
         positions_data = self.open_positions.get_positions()
-        
+
         return {
             'cash': float(account_data.get('cash', 0)),
             'equity': float(account_data.get('equity', 0)),
             'positions': positions_data,
             'timestamp': datetime.now().isoformat()
         }
-    
-    def save_portfolio_snapshot(self):
-        """Save current portfolio state to database"""
+
+    # Portfolio Operations
+
+    def save_portfolio_snapshot(self) -> Dict[str, Any]:
+        """
+        Save current portfolio state to database.
+        Business logic: fetches data from APIs, calculates metrics, saves to DB.
+        """
         account_data = self.account_status.get_status()
         positions_data = self.open_positions.get_positions()
-        
-        # Get current prices for all positions
+
+        # Calculate portfolio metrics
+        total_equity = float(account_data.get('equity', 0))
+        cash = float(account_data.get('cash', 0))
+        invested_capital = total_equity - cash
+
+        unrealized_pnl = sum(
+            float(pos.get('market_value', 0)) - float(pos.get('avg_entry_price', 0)) * abs(float(pos.get('qty', 0)))
+            for pos in positions_data
+        )
+
+        prev_equity = self.portfolio_repo.get_previous_equity()
+        day_change = total_equity - prev_equity if prev_equity else 0
+        day_change_pct = (day_change / prev_equity * 100) if prev_equity else 0
+
+        snapshot = {
+            'timestamp': datetime.now().isoformat(),
+            'account_id': account_data.get('id'),
+            'total_equity': total_equity,
+            'cash': cash,
+            'invested_capital': invested_capital,
+            'unrealized_pnl': unrealized_pnl,
+            'realized_pnl': 0.0,
+            'total_pnl': unrealized_pnl,
+            'day_change': day_change,
+            'day_change_pct': day_change_pct
+        }
+
+        self.portfolio_repo.save_snapshot(snapshot)
+
+        # Save positions with calculated metrics
         current_prices = {}
         for pos in positions_data:
             symbol = pos.get('symbol')
             if symbol:
                 current_prices[symbol] = self.price_feed.get_current_price(symbol)
-        
-        # Save portfolio snapshot
-        snapshot = self.portfolio_tracker.save_portfolio_snapshot(account_data, positions_data)
-        
-        # Save positions with current prices
-        self.portfolio_tracker.save_positions(positions_data, current_prices)
-        
+
+        self._save_positions_with_metrics(positions_data, current_prices, total_equity)
+
         return snapshot
-    
-    def get_performance_metrics(self, period: str = 'all_time'):
-        """Get calculated performance metrics"""
-        return self.portfolio_tracker.calculate_performance_metrics(period)
-    
-    def get_portfolio_history(self, days: int = 30):
-        """Get portfolio history for analysis"""
-        return self.portfolio_tracker.get_portfolio_history(days)
-    
-    def export_portfolio_data(self, output_path: str = "data/portfolio_export.json"):
-        """Export portfolio data to JSON"""
-        return self.portfolio_tracker.export_to_json(output_path)
-    
-    # Portfolio Universe Management Methods
-    
+
+    def _save_positions_with_metrics(self, positions_data: List[Dict], current_prices: Dict, total_equity: float):
+        """Helper to calculate and save position metrics"""
+        timestamp = datetime.now().isoformat()
+        positions = []
+
+        for pos in positions_data:
+            symbol = pos.get('symbol')
+            if not symbol:
+                continue
+
+            current_price = current_prices.get(symbol, 0)
+            quantity = abs(float(pos.get('qty', 0)))
+            avg_entry_price = float(pos.get('avg_entry_price', 0))
+            market_value = float(pos.get('market_value', 0))
+
+            cost_basis = quantity * avg_entry_price
+            unrealized_pnl = market_value - cost_basis
+            unrealized_pnl_pct = (unrealized_pnl / cost_basis * 100) if cost_basis > 0 else 0
+            position_size_pct = (market_value / total_equity * 100) if total_equity > 0 else 0
+
+            positions.append({
+                'timestamp': timestamp,
+                'symbol': symbol,
+                'side': 'LONG' if float(pos.get('qty', 0)) > 0 else 'SHORT',
+                'quantity': quantity,
+                'avg_entry_price': avg_entry_price,
+                'current_price': current_price,
+                'market_value': market_value,
+                'cost_basis': cost_basis,
+                'unrealized_pnl': unrealized_pnl,
+                'unrealized_pnl_pct': unrealized_pnl_pct,
+                'position_size_pct': position_size_pct,
+                'days_held': 1
+            })
+
+        self.portfolio_repo.save_positions(positions)
+
+    def calculate_performance_metrics(self, period: str = 'all_time') -> Dict[str, Any]:
+        """Calculate portfolio performance metrics (business logic)"""
+        df = self.portfolio_repo.get_history(days=365 if period == 'all_time' else 30)
+
+        if df.empty:
+            return {}
+
+        df['returns'] = df['total_equity'].pct_change()
+        df['cumulative_returns'] = (1 + df['returns']).cumprod() - 1
+
+        total_return = df['cumulative_returns'].iloc[-1] if not df.empty else 0
+        sharpe_ratio = df['returns'].mean() / df['returns'].std() * (252 ** 0.5) if df['returns'].std() > 0 else 0
+
+        df['peak'] = df['total_equity'].cummax()
+        df['drawdown'] = (df['total_equity'] - df['peak']) / df['peak']
+        max_drawdown = df['drawdown'].min()
+
+        return {
+            'total_return': total_return,
+            'total_return_pct': total_return * 100,
+            'sharpe_ratio': sharpe_ratio,
+            'max_drawdown': max_drawdown,
+            'volatility': df['returns'].std() * (252 ** 0.5)
+        }
+
+    def get_portfolio_history(self, days: int = 30) -> pd.DataFrame:
+        """Get portfolio history"""
+        return self.portfolio_repo.get_history(days)
+
+    def export_portfolio_data(self, output_path: str = "data/portfolio_export.json") -> str:
+        """Export portfolio data"""
+        return self.portfolio_repo.export_to_json(output_path)
+
+    # News Operations
+
+    def save_news(self, articles: List[Dict[str, Any]]) -> int:
+        """Save news articles"""
+        return self.news_repo.save_articles(articles)
+
+    def get_news_for_symbol(self, symbol: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get news for a symbol"""
+        return self.news_repo.get_by_symbol(symbol, limit)
+
+    # Universe Operations
+
     def update_universe(self) -> Set[str]:
-        """
-        Update portfolio universe with current positions.
-        
-        Discovers current positions from Alpaca and updates the universe database.
-        Marks previously owned positions as historical if they're no longer held.
-        
-        Returns:
-            Set of current position symbols
-        """
+        """Update portfolio universe with current positions"""
         positions = self.open_positions.get_positions()
-        current_symbols: Set[str] = set()
-        
+        current_symbols = set()
+
         for pos in positions:
             symbol = pos.get('symbol')
             if symbol:
                 current_symbols.add(symbol)
-                self._add_to_universe(symbol, 'current', f"Current position: {pos.get('qty', 0)} shares")
-        
-        # Mark sold positions as historical
-        self._mark_sold_positions(current_symbols)
-        
+                self.universe_repo.add_symbol(
+                    symbol,
+                    status='current',
+                    notes=f"Current position: {pos.get('qty', 0)} shares"
+                )
+
+        self.universe_repo.mark_as_historical(current_symbols)
         return current_symbols
-    
+
     def get_all_tracking_symbols(self) -> Set[str]:
-        """
-        Get all symbols we should track (current + historical + watchlist).
-        
-        Returns:
-            Set of all symbols in the portfolio universe
-        """
-        conn = sqlite3.connect(self.portfolio_tracker.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT symbol FROM portfolio_universe')
-        symbols = {row[0] for row in cursor.fetchall()}
-        
-        conn.close()
-        
-        # Fallback to AAPL if universe is empty (for testing)
+        """Get all symbols being tracked"""
+        symbols = self.universe_repo.get_all_symbols()
         return symbols if symbols else {'AAPL'}
-    
+
     def get_universe_summary(self) -> Dict[str, Any]:
-        """
-        Get summary of the portfolio universe.
-        
-        Returns:
-            Dictionary with universe statistics and breakdown by status
-        """
-        conn = sqlite3.connect(self.portfolio_tracker.db_path)
-        cursor = conn.cursor()
-        
-        # Count by status
-        cursor.execute('''
-            SELECT status, COUNT(*) 
-            FROM portfolio_universe 
-            GROUP BY status
-        ''')
-        status_counts = dict(cursor.fetchall())
-        
-        # Get frequently traded stocks
-        cursor.execute('''
-            SELECT symbol, times_owned 
-            FROM portfolio_universe 
-            WHERE times_owned > 1 
-            ORDER BY times_owned DESC 
-            LIMIT 5
-        ''')
-        frequent_trades = cursor.fetchall()
-        
-        conn.close()
-        
-        return {
-            'status_counts': status_counts,
-            'total_symbols': sum(status_counts.values()),
-            'frequently_traded': frequent_trades,
-            'last_updated': datetime.now().isoformat()
-        }
-    
-    def add_watchlist_symbol(self, symbol: str, notes: Optional[str] = None) -> None:
-        """
-        Add a symbol to the watchlist.
-        
-        Args:
-            symbol: Stock symbol to add to watchlist
-            notes: Optional notes about why this symbol is being watched
-        """
-        self._add_to_universe(
-            symbol, 
-            'watchlist', 
-            notes or f"Added to watchlist on {datetime.now().strftime('%Y-%m-%d')}"
-        )
-    
-    def _add_to_universe(self, symbol: str, status: str, notes: Optional[str] = None) -> None:
-        """
-        Add or update a symbol in the portfolio universe.
-        
-        Args:
-            symbol: Stock symbol
-            status: Status ('current', 'historical', 'watchlist')
-            notes: Optional notes about the symbol
-        """
-        conn = sqlite3.connect(self.portfolio_tracker.db_path)
-        cursor = conn.cursor()
-        
-        # Check if symbol exists
-        cursor.execute('SELECT symbol, times_owned FROM portfolio_universe WHERE symbol = ?', (symbol,))
-        existing = cursor.fetchone()
-        
-        if existing:
-            # Update existing symbol
-            times_owned = existing[1]
-            if status == 'current' and existing:
-                # If we're buying back a stock we previously owned
-                cursor.execute('''
-                    UPDATE portfolio_universe 
-                    SET status = ?, last_seen = ?, notes = ?, times_owned = ?
-                    WHERE symbol = ?
-                ''', (status, datetime.now().isoformat(), notes, times_owned + 1, symbol))
-            else:
-                # Regular update
-                cursor.execute('''
-                    UPDATE portfolio_universe 
-                    SET status = ?, last_seen = ?, notes = ?
-                    WHERE symbol = ?
-                ''', (status, datetime.now().isoformat(), notes, symbol))
-        else:
-            # Insert new symbol
-            cursor.execute('''
-                INSERT INTO portfolio_universe 
-                (symbol, first_seen, last_seen, status, times_owned, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (
-                symbol, 
-                datetime.now().isoformat(), 
-                datetime.now().isoformat(),
-                status, 
-                1 if status == 'current' else 0,
-                notes
-            ))
-        
-        conn.commit()
-        conn.close()
-    
-    def _mark_sold_positions(self, current_symbols: Set[str]) -> None:
-        """
-        Mark positions that are no longer current as historical.
-        
-        Args:
-            current_symbols: Set of symbols currently held
-        """
-        conn = sqlite3.connect(self.portfolio_tracker.db_path)
-        cursor = conn.cursor()
-        
-        # Get all symbols that were marked as 'current'
-        cursor.execute("SELECT symbol FROM portfolio_universe WHERE status = 'current'")
-        previously_current = {row[0] for row in cursor.fetchall()}
-        
-        # Find symbols that are no longer current
-        sold_symbols = previously_current - current_symbols
-        
-        for symbol in sold_symbols:
-            cursor.execute('''
-                UPDATE portfolio_universe 
-                SET status = 'historical', last_seen = ?
-                WHERE symbol = ?
-            ''', (datetime.now().isoformat(), symbol))
-        
-        conn.commit()
-        conn.close()
-    
-    def _load_watchlist_from_config(self) -> None:
-        """
-        Load watchlist symbols from configuration file.
-        
-        Reads the watchlist from the YAML config and adds symbols to the universe.
-        """
-        try:
-            import yaml
-            with open(self.config_path, 'r') as f:
-                config = yaml.safe_load(f)
-            
-            watchlist = config.get('portfolio', {}).get('watchlist', [])
-            for symbol in watchlist:
-                self._add_to_universe(
-                    symbol, 
-                    'watchlist', 
-                    f"Added from config on {datetime.now().strftime('%Y-%m-%d')}"
-                )
-        except Exception as e:
-            print(f"Could not load watchlist from config: {e}")
-            # Add some default watchlist symbols for testing
-            default_watchlist = ['NVDA', 'GOOGL', 'AMD']
-            for symbol in default_watchlist:
-                self._add_to_universe(
-                    symbol, 
-                    'watchlist', 
-                    f"Default watchlist symbol added on {datetime.now().strftime('%Y-%m-%d')}"
-                )
+        """Get universe summary"""
+        return self.universe_repo.get_summary()
+
+    def add_to_watchlist(self, symbol: str, notes: str = None):
+        """Add symbol to watchlist"""
+        self.universe_repo.add_symbol(symbol, status='watchlist', notes=notes)
+
+    def _load_watchlist_from_config(self):
+        """Load watchlist from config file"""
+        # TODO: Implement config loading if needed
+        pass
