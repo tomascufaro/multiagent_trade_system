@@ -7,8 +7,8 @@ import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Any, Set
 
-from .api_clients import PriceFeed, NewsFeed, AccountStatus, OpenPositions
-from .repositories import PortfolioRepository, NewsRepository, UniverseRepository
+from data_module.api_clients import PriceFeed, NewsFeed, AccountStatus, OpenPositions
+from data_module.repositories import PortfolioRepository, NewsRepository, UniverseRepository
 
 
 class DataManager:

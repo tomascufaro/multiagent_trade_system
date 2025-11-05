@@ -18,11 +18,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Add data_module to path for imports
-data_module_path = project_root / "data_module"
-sys.path.insert(0, str(data_module_path))
-
-from data_manager import DataManager
+from data_module.data_manager import DataManager
 
 def main():
     """Main function to run daily portfolio snapshot."""

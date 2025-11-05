@@ -4,7 +4,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from data_module.data_manager import DataManager
-from data_module.news_feed import NewsFeed
+from data_module.api_clients import NewsFeed
 from datetime import datetime
 
 
