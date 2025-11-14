@@ -1,197 +1,151 @@
-# Implementation Plan: Core Data Integration for Bull/Bear Agents
+# Analyst Service Refactor - Implementation Plan
 
 ## Overview
-Integrate database data into the analysis agents using pre-fetched core data (no tools yet). This provides agents with rich context from portfolio history, positions, trades, and news.
+
+Refactor the analyst service into a simple, **portfolio‑level**, analysis‑only pipeline that:
+- Builds a rich DB‑backed **portfolio context** via `data_context.py` and `DataManager`.
+- Runs a single bull vs bear **portfolio debate** using CrewAI agents.
+- Returns an informative **portfolio report** (no trading actions) suggesting how to adjust holdings and wishlist.
 
 ---
 
-## Phase 1: Create Data Context Builder
+## Goals
 
-### File: `analyst_service/data_context.py`
+- Keep the system focused on **portfolio‑level insight**, not order generation.
+- Reuse existing components (`DataManager`, `data_context`, bull/bear agents, `TradingCrew`) where they still fit.
+- Minimize moving parts in the main flow (one main debate per run).
+- Make it easy to call a single entrypoint, e.g. `AnalystService().analyze_portfolio()`.
 
-**Purpose**: Centralized module to fetch database data using existing DataManager methods.
+---
 
-**Function**: `build_analysis_context(symbol: str) -> Dict[str, Any]`
+## Target Architecture (v2 Analyst Service)
 
-**Data Sources** (using existing DataManager methods):
-- `DataManager.get_portfolio_summary()` - Current portfolio (equity, cash, positions)
-- `DataManager.get_position(symbol)` - Current position for symbol
-- `DataManager.calculate_performance_metrics('30d')` - Performance stats
-- `DataManager.get_news_for_symbol(symbol, limit=10)` - Recent news
+### New High‑Level Interface
 
-**Returns structured context**:
+Extend or adapt `AnalystService` in `analyst_service/analysis/analyst_service.py` to support a portfolio‑centric API:
+
 ```python
+analysis = AnalystService().analyze_portfolio()
+
+# Example return shape
 {
-    'symbol': 'AAPL',
-    
-    # From DataManager.get_portfolio_summary()
-    'portfolio': {
-        'cash': 99706.03,
-        'equity': 99992.09,
-        'positions': [...],  # All current positions
-        'timestamp': '...'
-    },
-    
-    # From DataManager.get_position(symbol) - returns None if no position
-    'position': {
-        'symbol': 'AAPL',
-        'side': 'LONG',
-        'qty': 10.0,
-        'avg_entry_price': 150.25,
-        'market_value': 1523.00
-    } or None,
-    
-    # From DataManager.calculate_performance_metrics('30d')
-    'performance': {
-        'total_return': 0.0175,
-        'total_return_pct': 1.75,
-        'sharpe_ratio': 1.25,
-        'max_drawdown': -0.05,
-        'volatility': 0.12
-    },
-    
-    # From DataManager.get_news_for_symbol(symbol, limit=10)
-    'recent_news': [
-        {'id': '...', 'headline': '...', 'summary': '...', 'created_at': '...', ...},
-        ...
-    ],
-    
-    # Optional: Direct DB queries (if needed for historical context)
-    'position_history': [],  # Query positions table directly if needed
-    'trade_history': []      # Query trades table directly if needed
+  "portfolio": { ... },        # Portfolio summary (equity, cash, positions)
+  "universe": { ... },         # Tracked symbols, incl. wishlist
+  "context": { ... },          # Structured context used in prompts
+  "debate": { ... },           # MarketAnalysis dict from a portfolio‑level debate
+  "summary": "...",            # High‑level portfolio summary from the agents
+  "timestamp": "...",
 }
 ```
 
----
+### Components Used in the New Flow
 
-## Phase 2: Format Context for LLM Prompts
+- `data_module.DataManager`:
+  - `get_portfolio_summary()` → cash, equity, open positions.
+  - `get_all_tracking_symbols()` / universe repo → watchlist and other tracked symbols.
+- `analyst_service/data_context.py`:
+  - `build_analysis_context(symbol)` remains available for symbol‑level context if needed.
+  - Add or reuse helpers to build a **portfolio‑level context dict** (aggregating portfolio, positions, wishlist, and recent news for relevant symbols).
+  - `format_context_for_prompt(context)` (or a new portfolio‑oriented formatter) is used to generate a single prompt block for the debate.
+- `analyst_service/agents`:
+  - Reuse existing bull/bear agents, but with **portfolio‑level tasks** (they read a portfolio context block instead of a single‑symbol context).
+  - Extend `DebateManager` or add a simple portfolio debate entry that creates one Crew with a single portfolio‑level debate task.
 
-### Function in `analyst_service/data_context.py`
+### Components Removed from the Main Path
 
-**Function**: `format_context_for_prompt(context: Dict) -> str`
-
-**Purpose**: Convert structured context dictionary into readable text for LLM prompts.
-
-**Format Example**:
-```
-=== PORTFOLIO CONTEXT ===
-Current Equity: $99,992.09
-Cash: $99,706.03
-Total P&L: $170.75 (+0.17%)
-Today's Change: -$7.91 (-0.79%)
-
-=== POSITION STATUS ===
-Symbol: AAPL
-Position: LONG (10.0 shares)
-Entry Price: $150.25
-Current Price: $152.30
-Unrealized P&L: +$20.50 (+1.36%)
-Days Held: 5
-
-=== POSITION HISTORY (Last 30 Days) ===
-- Day 1: +1.2% (10 shares)
-- Day 2: +0.8% (10 shares)
-...
-
-=== TRADE HISTORY ===
-- 2025-01-10: BUY 10 shares @ $150.25 (Reason: "Strong bullish conviction", Confidence: 0.75)
-- 2025-01-05: BUY 5 shares @ $148.50 (Reason: "...", Confidence: 0.65)
-
-=== PERFORMANCE METRICS ===
-Total Return: +1.75%
-Sharpe Ratio: 1.25
-Max Drawdown: -5.0%
-Win Rate: 65%
-Average Win: $125.50
-Average Loss: -$75.25
-
-=== RECENT NEWS ===
-- "Apple announces new product" (Positive, 2 days ago)
-- "Market volatility concerns" (Neutral, 5 days ago)
-...
-```
+- `SentimentAgent` and OpenAI‑heavy sentiment calls are **not** part of the default pipeline.
+- Symbol‑level trading recommendation logic (`BUY/SELL/CLOSE_*`) remains deprecated.
+- Action‑oriented fields (`action`, `position_context`, etc.) are removed from the main result; instead we keep descriptive portfolio suggestions in natural language.
 
 ---
 
-## Phase 3: Update Agents and Trading Crew
+## Phase 1 – Implement Portfolio‑Level AnalystService
 
-### Update `bull_agent.py` and `bear_agent.py`
+**File**: `analyst_service/analysis/analyst_service.py`
 
-**Changes**:
-1. **Update `create_analysis_task()` to accept `db_context`**:
-   ```python
-   def create_analysis_task(
-       self, 
-       prices: List[float], 
-       sentiment_data: Dict[str, Any],
-       db_context: Dict[str, Any]  # NEW
-   ) -> Task:
-   ```
+1. Extend `AnalystService` with a portfolio‑centric method:
+   - `__init__(config_path='analyst_service/config/settings.yaml')` already wires `DataManager` and `DebateManager`.
+   - Add `analyze_portfolio(self) -> Dict[str, Any]`:
+     - Get portfolio overview via `DataManager.get_portfolio_summary()`.
+     - Get tracking symbols / universe via `DataManager.get_all_tracking_symbols()` (or universe repo).
+     - Build a **portfolio context dict** that includes:
+       - Portfolio snapshot (equity, cash, overall performance if available).
+       - List of open positions (symbol, size, unrealized P&L if available).
+       - Wishlist / tracked symbols (with a flag indicating no current position).
+       - Optional recent news for current positions and wishlisted symbols.
+     - Format this into a prompt text block (reuse or extend `format_context_for_prompt` for portfolio use).
+     - Call a portfolio‑level debate method (see Phase 2) with this context text.
+     - Construct final analysis dict:
+       - `portfolio`, `universe`, `context`, `debate`, `summary`, `timestamp`.
 
-2. **Enhance task description** to include formatted DB context and updated instructions
-
-### Update `trading_crew.py`
-
-**Changes**:
-1. Initialize DataManager
-2. Fetch context in `conduct_analysis()`
-3. Pass context to agent tasks
-
-**Enhanced Agent Instructions**:
-
-For Bull Agent:
-- Consider current position performance (if LONG and profitable, this is bullish)
-- Analyze trade history success rate
-- Factor in portfolio context (if portfolio is doing well, more confident)
-- Consider news sentiment trends
-- Use position history to identify trends
-
-For Bear Agent:
-- Consider current position performance (if LONG and losing, this is bearish)
-- Analyze trade history failure rate
-- Factor in portfolio drawdowns
-- Consider negative news sentiment
-- Use position history to identify downtrends
+2. Keep symbol‑level `analyze(symbol)` as a possible future helper if needed, but the main path becomes `analyze_portfolio()`.
 
 ---
 
-## Implementation Order
+## Phase 2 – Portfolio‑Level Debate Orchestration
 
-1. **Step 1**: Create `data_context.py` with `build_analysis_context()` and `format_context_for_prompt()`
-2. **Step 2**: Update `bull_agent.py` to accept `db_context` parameter
-3. **Step 3**: Update `bear_agent.py` to accept `db_context` parameter
-4. **Step 4**: Update `trading_crew.py` to fetch context and pass to agents
-5. **Step 5**: Test with existing data
+**File**: `analyst_service/agents/debate_manager.py` (or a small new helper alongside it)
+
+1. Adapt debate management for portfolio context:
+   - Extend `DebateManager` with a new method `conduct_portfolio_debate(context_text: str)` that:
+     - Uses the existing bull/bear agents.
+     - Creates **one task each** where the description includes the full portfolio context text and clear portfolio‑level instructions.
+   - The debate topic becomes: “Given this portfolio and wishlist, what adjustments (add/trim/hold/avoid) make sense overall?” (described textually, not as explicit orders).
+
+2. Return a `MarketAnalysis` structure as today, but interpreted at portfolio level:
+   - `bull_case` and `bear_case` list arguments and conviction about being more risk‑on vs risk‑off.
+   - `market_bias` expresses the tilt toward risk‑taking or de‑risking.
+   - `summary` is a concise portfolio‑level explanation.
+
+3. Wire `AnalystService.analyze_portfolio()` to call this portfolio debate and embed its result in the final analysis dict.
 
 ---
 
-## Testing Strategy
+## Phase 3 – Wire CLI to Portfolio‑Level Analysis
 
-1. **Test data fetching**: Verify all DB queries return expected data
-2. **Test context formatting**: Ensure formatted text is readable and complete
-3. **Test agent integration**: Verify agents receive and use context correctly
-4. **Test analysis quality**: Compare analysis with/without DB context
+**File**: `analyst_service/main.py`
+
+1. Use `AnalystService.analyze_portfolio()` in `analyst_service/main.py`:
+   - `from analyst_service.analysis.analyst_service import AnalystService`.
+   - Construct `AnalystService()` and call `analysis = analyst.analyze_portfolio()`.
+
+2. CLI output reflects **portfolio focus**:
+   - Print timestamp and basic portfolio metrics (equity, cash, number of positions).
+   - Print portfolio‑level debate results:
+     - Bull vs bear convictions.
+     - Market bias (risk‑on vs risk‑off).
+     - Summary explaining suggested portfolio stance.
+   - Optionally print a short bullet list of “focus symbols” mentioned in the debate arguments.
+
+3. Do **not** print explicit trade instructions (no `BUY/SELL/CLOSE_*`). The output remains descriptive suggestions.
 
 ---
 
-## Backlog: Future Enhancements
+## Phase 4 – Deprecate Legacy MarketAnalyzer & Trading Logic
 
-### Phase 2: Repository Methods (If Needed Later)
-- `get_position_history(symbol, days)` - Dedicated method for position history
-- `get_trade_history(symbol, limit)` - Dedicated method for trade history  
-- `get_latest_position_from_db(symbol)` - DB version of position (vs API)
-- `get_performance_by_symbol(symbol)` - Symbol-specific performance metrics
+1. Ensure any legacy trading‑oriented logic (e.g. `MarketAnalyzer`, recommendation generators) is not used in the new portfolio flow.
+2. Keep any sentiment‑specific components as optional tools only:
+   - No instantiation in `AnalystService` by default.
+   - Leave them available for future advanced pipelines or offline sentiment runs.
 
-### Phase 3: Tools for Agents
-- `get_historical_position_data(symbol, days)` - Tool for deeper position queries
-- `get_trade_success_rate(symbol)` - Tool for trade analysis
-- `get_extended_news(symbol, days)` - Tool for extended news search
-- `get_related_symbols(symbol)` - Tool to find correlated symbols
+---
 
-### Phase 4: Advanced Features
-- Performance benchmarking (compare analysis quality with/without DB context)
-- Caching for frequently accessed data
-- Data validation and error handling
-- Real-time data streaming updates
-- Multi-symbol analysis support
+## Phase 5 – Cleanup & Documentation
 
+1. Remove or update trading‑oriented text in:
+   - `README.md` section describing the Analyst Service (focus on debate and insights, not trade execution).
+   - Any references to `MarketAnalyzer` as the primary entrypoint; replace with `AnalystService`.
+
+2. Update `CHANGELOG.md` to note the shift to portfolio‑level analysis.
+
+---
+
+## Future Enhancements (Backlog)
+
+- Add an optional, pluggable sentiment layer:
+  - Use a sentiment helper or agent to compute a real `sentiment_data` structure for the portfolio or key symbols.
+  - Feed it into the portfolio‑level debate alongside TA and DB context.
+- Add richer portfolio summaries:
+  - Helper to generate a natural‑language explanation from `debate` + `ta_snapshot` + portfolio metrics.
+- Add optional per‑symbol deep dives:
+  - For a small set of focus symbols, call a symbol‑level debate flow to augment the portfolio report when needed.

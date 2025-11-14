@@ -9,12 +9,15 @@ from .bear_agent import BearAgent
 # Add shared directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
 from models import MarketAnalysis, AgentAnalysis
+from ..data_context import build_analysis_context
+from data_module.data_manager import DataManager
 
 class TradingCrew:
-    def __init__(self):
-        """Initialize the trading crew with bull and bear agents."""
+    def __init__(self, config_path: str = 'analyst_service/config/settings.yaml'):
+        """Initialize the trading crew with bull and bear agents and data access."""
         self.bull_agent = BullAgent()
         self.bear_agent = BearAgent()
+        self.data_manager = DataManager(config_path)
         
         # Create the crew with both agents
         self.crew = Crew(
@@ -24,20 +27,23 @@ class TradingCrew:
             verbose=True
         )
 
-    def conduct_analysis(self, prices: List[float], sentiment_data: Dict[str, Any]) -> Dict[str, Any]:
+    def conduct_analysis(self, symbol: str, prices: List[float], sentiment_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Conduct a collaborative analysis between bull and bear agents.
         
         Args:
+            symbol: Trading symbol under analysis
             prices: List of historical prices for technical analysis
             sentiment_data: Dictionary containing sentiment analysis data
             
         Returns:
             Dictionary containing both perspectives and overall market bias
         """
+        # Build database-backed context for agents
+        db_context = build_analysis_context(symbol)
         # Create tasks for both agents
-        bull_task = self.bull_agent.create_analysis_task(prices, sentiment_data)
-        bear_task = self.bear_agent.create_analysis_task(prices, sentiment_data)
+        bull_task = self.bull_agent.create_analysis_task(prices, sentiment_data, db_context)
+        bear_task = self.bear_agent.create_analysis_task(prices, sentiment_data, db_context)
         
         # Update crew tasks
         self.crew.tasks = [bull_task, bear_task]

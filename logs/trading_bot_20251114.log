@@ -1,0 +1,6 @@
+2025-11-14 22:48:04,694 - analyst_service - INFO - Starting analysis for AAPL
+2025-11-14 22:48:04,761 - analyst_service - ERROR - Error in analysis: Error deleting task outputs: attempt to write a readonly database
+2025-11-14 22:49:53,317 - analyst_service - INFO - Starting analysis for AAPL
+2025-11-14 22:50:04,430 - analyst_service - INFO - Analysis completed for AAPL
+2025-11-14 23:15:34,727 - analyst_service - INFO - Starting portfolio analysis
+2025-11-14 23:15:45,473 - analyst_service - INFO - Portfolio analysis completed

@@ -6,13 +6,13 @@ from crewai.tools import tool
 import sys
 import os
 
-# Add utils directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
+# Add shared directory to path for pydantic models
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
 from models import AgentAnalysis
 
-# Add the features directory to the path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'features'))
-from ta_signals import TechnicalAnalysis
+# Import technical analysis from analysis module
+from ..analysis.ta_signals import TechnicalAnalysis
+from ..data_context import format_context_for_prompt
 
 @tool("get_technical_signals")
 def get_technical_signals(prices: str) -> str:
@@ -49,14 +49,17 @@ class BearAgent:
             llm="gpt-4.1-nano"
         )
 
-    def create_analysis_task(self, prices: list, sentiment_data: Dict[str, Any]) -> Task:
-        """Create a CrewAI task for bear analysis."""
-        
+    def create_analysis_task(self, prices: list, sentiment_data: Dict[str, Any], db_context: Dict[str, Any]) -> Task:
+        """Create a CrewAI task for symbol-level bear analysis."""
+        formatted_context = format_context_for_prompt(db_context)
         return Task(
             description=f"""Analyze the provided price data and sentiment to build a comprehensive bearish case.
             
             Price Data: {json.dumps(prices)}
             Sentiment Data: {json.dumps(sentiment_data)}
+            
+            === DATABASE CONTEXT ===
+            {formatted_context}
             
             Steps:
             1. Use the get_technical_signals tool with the price data to get RSI, MACD, and EMA signals
@@ -65,8 +68,12 @@ class BearAgent:
                - MACD histogram < 0 and MACD < signal (bearish momentum)
                - EMA crossover < 0 (bearish crossover)
             3. Incorporate sentiment data if negative
-            4. Calculate conviction level (0.0 to 1.0) based on signal strength
-            5. Provide SELL recommendation if conviction > 0.5, otherwise HOLD
+            4. Incorporate database context:
+               - Consider current {db_context.get('symbol', 'SYMBOL')} position performance if any
+               - Use portfolio drawdowns to calibrate caution
+               - Weigh negative news impact if notable
+            5. Calculate conviction level (0.0 to 1.0) based on signal strength and context
+            6. Provide SELL recommendation if conviction > 0.5, otherwise HOLD
             
             Return ONLY valid JSON with: arguments (list), conviction (float), recommendation (string)""",
             agent=self.agent,
@@ -74,3 +81,26 @@ class BearAgent:
             output_pydantic=AgentAnalysis
         )
 
+    def create_portfolio_task(self, context_text: str) -> Task:
+        """Create a CrewAI task for portfolio-level bear analysis."""
+        return Task(
+            description=f"""You are a bearish portfolio risk manager.
+
+Analyze the following portfolio context and build a cautious, risk-focused bearish case
+for how the investor should think about their overall portfolio and wishlist.
+
+=== PORTFOLIO CONTEXT ===
+{context_text}
+
+Focus on:
+- Where the portfolio may be overexposed or concentrated
+- Which existing positions look vulnerable or stretched
+- Which wishlist/tracked symbols should be avoided or treated carefully
+- How portfolio drawdowns, volatility, and correlations impact risk
+
+Return ONLY valid JSON with: arguments (list), conviction (float), recommendation (string).
+Recommendation is a high-level stance such as SELL, HOLD, or BUY to indicate overall risk posture.""",
+            agent=self.agent,
+            expected_output="JSON formatted portfolio-level bearish arguments, conviction level, and stance recommendation",
+            output_pydantic=AgentAnalysis,
+        )

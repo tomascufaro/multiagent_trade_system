@@ -1,5 +1,5 @@
 """
-Data Manager - Orchestration layer for trading bot data operations
+Data Manager - Orchestration layer for analyst service data operations
 
 Coordinates between API clients and data repositories, contains business logic.
 """

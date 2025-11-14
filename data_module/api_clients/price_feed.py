@@ -45,7 +45,9 @@ class PriceFeed:
                 'start': start_time,
                 'end': end_time,
                 'limit': limit,
-                'sort': 'desc'
+                'sort': 'desc',
+                # Use IEX feed to avoid SIP restrictions on free plans
+                'feed': 'iex',
             }
 
             response = requests.get(self.base_url, headers=headers, params=params)
