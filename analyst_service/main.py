@@ -23,7 +23,7 @@ def main():
         analysis = analyst.analyze_portfolio()
 
         portfolio = analysis.get("portfolio") or {}
-        debate = analysis.get("debate") or {}
+        report = analysis.get("report") or ""
 
         print("\n=== Portfolio Analyst Report ===")
         print(f"Timestamp: {analysis['timestamp']}")
@@ -32,10 +32,9 @@ def main():
         positions = portfolio.get("positions") or []
         print(f"Open Positions: {len(positions)}")
 
-        if debate:
-            print("\nDebate Results:")
-            print(f"  Market Bias: {debate.get('market_bias', 'N/A')}")
-            print(f"  Summary: {debate.get('summary', 'N/A')}")
+        if report:
+            print("\nPortfolio Report:")
+            print(report)
 
         logger.info("Portfolio analysis completed")
 

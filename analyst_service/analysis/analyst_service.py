@@ -4,10 +4,12 @@ Supports both symbol-level and portfolio-level analysis flows.
 """
 from datetime import datetime
 from typing import Any, Dict, List
+import logging
 
 from data_module.data_manager import DataManager
 
 from .ta_signals import TechnicalAnalysis
+from .report_writer import ReportWriter
 from ..agents.debate_manager import DebateManager
 from ..data_context import build_analysis_context, format_portfolio_context_for_prompt
 
@@ -17,6 +19,7 @@ class AnalystService:
         self.data_manager = DataManager(config_path)
         self.ta_signals = TechnicalAnalysis(config_path)
         self.debate_manager = DebateManager(config_path)
+        self.report_writer = ReportWriter()
 
     def analyze(self, symbol: str) -> Dict[str, Any]:
         """Run analysis for a single symbol using DB context, TA, and agent debate."""
@@ -71,11 +74,21 @@ class AnalystService:
 
         debate = self.debate_manager.conduct_portfolio_debate(context_text)
 
+        # Use the report writer agent to build the final narrative report
+        report = self.report_writer.write_portfolio_report(context_text, debate)
+
+        # Log the detailed report so the debate can be inspected later
+        logger = logging.getLogger("analyst_service")
+        logger.info("Portfolio debate detailed report:\n%s", report)
+
         return {
             "portfolio": portfolio,
             "universe": tracking_symbols,
             "context": context_dict,
             "debate": debate,
             "summary": debate.get("summary", ""),
+            "report": report,
             "timestamp": datetime.now().isoformat(),
         }
+
+    # _build_portfolio_report is no longer used; kept as a possible fallback helper if needed.

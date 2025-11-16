@@ -7,7 +7,7 @@ import sys
 import os
 
 # Add shared directory to path for pydantic models
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from models import AgentAnalysis
 
 # Import technical analysis from analysis module
@@ -33,8 +33,10 @@ def get_technical_signals(prices: str) -> str:
     except Exception as e:
         raise Exception(f"Technical analysis failed: {str(e)}")
 
+
 class BearAgent:
-    def __init__(self):
+    def __init__(self, use_tools: bool = True):
+        tools = [get_technical_signals] if use_tools else []
         self.agent = Agent(
             role="Bearish Market Analyst",
             goal="Analyze market data to identify bearish signals and build strong cases for selling",
@@ -42,7 +44,7 @@ class BearAgent:
             in technical indicators and market sentiment. You excel at identifying overbought conditions, 
             negative momentum shifts, and bearish sentiment that could lead to profitable short positions.
             You use technical analysis tools like RSI, MACD, and EMA to support your bearish thesis.""",
-            tools=[get_technical_signals],
+            tools=tools,
             verbose=True,
             allow_delegation=False,
             max_iter=5,

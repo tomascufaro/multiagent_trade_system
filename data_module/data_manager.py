@@ -3,6 +3,7 @@ Data Manager - Orchestration layer for analyst service data operations
 
 Coordinates between API clients and data repositories, contains business logic.
 """
+import os
 import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Any, Set
@@ -234,6 +235,14 @@ class DataManager:
         self.universe_repo.add_symbol(symbol, status='watchlist', notes=notes)
 
     def _load_watchlist_from_config(self):
-        """Load watchlist from config file"""
-        # TODO: Implement config loading if needed
-        pass
+        """Seed watchlist from WISHLIST_SYMBOLS environment variable."""
+        symbols_env = os.getenv("WISHLIST_SYMBOLS")
+        if not symbols_env:
+            return
+
+        existing_symbols = self.universe_repo.get_all_symbols()
+        for raw_symbol in symbols_env.split(','):
+            symbol = raw_symbol.strip().upper()
+            if not symbol or symbol in existing_symbols:
+                continue
+            self.add_to_watchlist(symbol)

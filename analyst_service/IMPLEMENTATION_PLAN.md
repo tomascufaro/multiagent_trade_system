@@ -145,7 +145,5 @@ analysis = AnalystService().analyze_portfolio()
 - Add an optional, pluggable sentiment layer:
   - Use a sentiment helper or agent to compute a real `sentiment_data` structure for the portfolio or key symbols.
   - Feed it into the portfolio‑level debate alongside TA and DB context.
-- Add richer portfolio summaries:
-  - Helper to generate a natural‑language explanation from `debate` + `ta_snapshot` + portfolio metrics.
 - Add optional per‑symbol deep dives:
   - For a small set of focus symbols, call a symbol‑level debate flow to augment the portfolio report when needed.

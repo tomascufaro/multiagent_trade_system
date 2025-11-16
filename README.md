@@ -71,15 +71,14 @@ See `data_module/database_diagram.md` for the complete schema.
 ### Analysis Service
 
 **Analyst Service** (`analyst_service/`)
-- Uses CrewAI agents (bull and bear analysts) for market analysis
-- Combines technical analysis, sentiment analysis, and portfolio context
-- Provides buy/sell/hold recommendations with confidence levels
+- Uses CrewAI agents (bull and bear analysts) for portfolio-level analysis
+- Combines database-backed portfolio context (positions, performance, news) and optional technical analysis
+- Produces portfolio-focused insights and risk stance instead of direct trading instructions
 
 **Components**:
-- `MarketAnalyzer` - Main analysis orchestrator
-- `BullAgent` / `BearAgent` - AI agents for bullish/bearish analysis
-- `SentimentAgent` - News sentiment analysis
-- `TechnicalAnalysis` - RSI, MACD, EMA signals
+- `AnalystService` - Main analysis orchestrator (symbol-level and portfolio-level flows)
+- `BullAgent` / `BearAgent` - AI agents for bullish/bearish analysis and debates
+- `TechnicalAnalysis` - RSI, MACD, EMA signals (used primarily for symbol-level TA)
 
 ## Setup
 
@@ -138,4 +137,3 @@ See `data_module/database_diagram.md` for the complete schema.
 ✅ **News Integration**: News articles linked to trading symbols  
 ✅ **AI Analysis**: CrewAI-powered market analysis with bull/bear perspectives  
 ✅ **Automated Workflows**: GitHub Actions for daily data collection  
-

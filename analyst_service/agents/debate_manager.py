@@ -46,8 +46,9 @@ class DebateManager:
         Returns:
             Dictionary containing both perspectives and overall portfolio bias.
         """
-        bull_agent = BullAgent()
-        bear_agent = BearAgent()
+        # For portfolio-level debates we deliberately disable tools (no TA calls).
+        bull_agent = BullAgent(use_tools=False)
+        bear_agent = BearAgent(use_tools=False)
 
         bull_task = bull_agent.create_portfolio_task(context_text)
         bear_task = bear_agent.create_portfolio_task(context_text)
