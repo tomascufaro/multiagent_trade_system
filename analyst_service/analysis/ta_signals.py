@@ -7,16 +7,36 @@ import yaml
 
 class TechnicalAnalysis:
     def __init__(self, config_path: str = "analyst_service/config/settings.yaml"):
-        with open(config_path, "r") as config_file:
-            settings = yaml.safe_load(config_file)
+        """
+        Initialize technical analysis settings.
 
-        ta_settings = settings["technical"]
-        self.rsi_period = ta_settings["rsi"]["period"]
-        self.macd_fast = ta_settings["macd"]["fast_period"]
-        self.macd_slow = ta_settings["macd"]["slow_period"]
-        self.macd_signal = ta_settings["macd"]["signal_period"]
-        self.ema_short = ta_settings["ema"]["short_period"]
-        self.ema_long = ta_settings["ema"]["long_period"]
+        If a YAML config exists at config_path and contains a `technical` section,
+        those values are used. Otherwise, sensible defaults are applied so that
+        no external config file is required.
+        """
+        # Default parameters (no config dependency)
+        self.rsi_period = 14
+        self.macd_fast = 12
+        self.macd_slow = 26
+        self.macd_signal = 9
+        self.ema_short = 20
+        self.ema_long = 50
+
+        if config_path and os.path.exists(config_path):
+            try:
+                with open(config_path, "r") as config_file:
+                    settings = yaml.safe_load(config_file) or {}
+
+                ta_settings = settings.get("technical", {})
+                self.rsi_period = ta_settings.get("rsi", {}).get("period", self.rsi_period)
+                self.macd_fast = ta_settings.get("macd", {}).get("fast_period", self.macd_fast)
+                self.macd_slow = ta_settings.get("macd", {}).get("slow_period", self.macd_slow)
+                self.macd_signal = ta_settings.get("macd", {}).get("signal_period", self.macd_signal)
+                self.ema_short = ta_settings.get("ema", {}).get("short_period", self.ema_short)
+                self.ema_long = ta_settings.get("ema", {}).get("long_period", self.ema_long)
+            except Exception:
+                # On any config error, fall back to defaults without failing.
+                pass
 
     def calculate_rsi(self, prices: list, period: int | None = None) -> float:
         """Calculate Relative Strength Index."""
