@@ -1,6 +1,9 @@
 name: Weekly Portfolio Report
 
 on:
+  push:
+    branches:
+      - feature/weekly-report-email
   schedule:
     - cron: '0 22 * * 5'
   workflow_dispatch:
