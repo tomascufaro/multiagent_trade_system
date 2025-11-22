@@ -3,12 +3,8 @@ import yaml
 import json
 from crewai import Agent, Task
 from crewai.tools import tool
-import sys
-import os
 
-# Add shared directory to path for pydantic models
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
-from models import AgentAnalysis
+from shared.models import AgentAnalysis
 
 # Import technical analysis from analysis module
 from ..analysis.ta_signals import TechnicalAnalysis

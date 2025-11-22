@@ -1,14 +1,10 @@
 from typing import Dict, Any, List
 import json
-import sys
-import os
 from crewai import Crew, Process
 from .bull_agent import BullAgent
 from .bear_agent import BearAgent
 
-# Add shared directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
-from models import MarketAnalysis, AgentAnalysis
+from shared.models import MarketAnalysis, AgentAnalysis
 from ..data_context import build_analysis_context
 from data_module.data_manager import DataManager
 
