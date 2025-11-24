@@ -150,7 +150,7 @@ See `data_module/database_diagram.md` for the complete schema.
 
 - `data_module/database_diagram.md` - Database schema (Mermaid ER diagram)
 - `data_module/data_manager_flowchart.md` - DataManager class flowchart
-- `analyst_service/IMPLEMENTATION_PLAN.md` - Future enhancements
+- `IMPLEMENTATION_PLAN.md` - Future enhancements
 
 ## Key Features
 

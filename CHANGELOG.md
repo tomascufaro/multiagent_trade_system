@@ -20,6 +20,8 @@
 
 ### Breaking changes
 
+- Removed the legacy `trading_service` directory and all its contents (agents, execution, risk control) to consolidate logic within `analyst_service`.
+- Moved `analyst_service/IMPLEMENTATION_PLAN.md` to the project root as `IMPLEMENTATION_PLAN.md`.
 - `BullAgent.create_analysis_task()` and `BearAgent.create_analysis_task()` now require an additional `db_context` argument.
 - `TradingCrew.conduct_analysis()` requires `symbol` as the first argument.
 - `DebateManager.conduct_debate()` requires `symbol` as the first argument.
