@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added `analyst_service/reporting/html_renderer.py` to format portfolio analyses into styled HTML and `email_sender.py` to send reports via SMTP using environment configuration.
+- Created `scripts/generate_report.py` to run the portfolio analysis, render the HTML report, send the email, and archive artifacts under `data/reports/`.
+- Added GitHub Actions workflow `.github/workflows/portfolio-report.yml` to send the weekly portfolio email each Friday at 22:00 UTC or on demand.
+- Documented the weekly email report flow and required SMTP environment variables in `README.md` and ignored generated report artifacts under `data/reports/`.
 - Added `analyst_service/data_context.py` with `build_analysis_context()` and `format_context_for_prompt()` to assemble database-backed context for agents.
 - Updated `analyst_service/agents/bull_agent.py` to accept a `db_context` parameter in `create_analysis_task()`, include formatted database context in the task description, and use shared `AgentAnalysis` models and `TechnicalAnalysis` from `analyst_service/analysis/ta_signals.py`.
 - Updated `analyst_service/agents/bear_agent.py` to mirror the bull agent changes: new `db_context` parameter, injected database context in prompts, and corrected imports.
@@ -16,6 +20,8 @@
 
 ### Breaking changes
 
+- Removed the legacy `trading_service` directory and all its contents (agents, execution, risk control) to consolidate logic within `analyst_service`.
+- Moved `analyst_service/IMPLEMENTATION_PLAN.md` to the project root as `IMPLEMENTATION_PLAN.md`.
 - `BullAgent.create_analysis_task()` and `BearAgent.create_analysis_task()` now require an additional `db_context` argument.
 - `TradingCrew.conduct_analysis()` requires `symbol` as the first argument.
 - `DebateManager.conduct_debate()` requires `symbol` as the first argument.

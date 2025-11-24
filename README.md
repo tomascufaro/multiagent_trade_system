@@ -79,6 +79,21 @@ See `data_module/database_diagram.md` for the complete schema.
 - `AnalystService` - Main analysis orchestrator (symbol-level and portfolio-level flows)
 - `BullAgent` / `BearAgent` - AI agents for bullish/bearish analysis and debates
 - `TechnicalAnalysis` - RSI, MACD, EMA signals (used primarily for symbol-level TA)
+- `reporting/` - HTML renderer and SMTP sender for weekly portfolio emails
+
+### Weekly HTML Email Report
+
+- `scripts/generate_report.py` runs a portfolio analysis, renders an HTML summary, emails it to recipients from env vars, and saves a copy under `data/reports/`.
+- GitHub Actions workflow `portfolio-report.yml` triggers every Friday at 22:00 UTC (and on-demand) to produce the weekly email report.
+
+#### Send a test email locally
+
+1. Populate a local `.env` with the SMTP values shown below. The script automatically loads this file.
+2. Run the report generator (it will send the HTML email and save artifacts):
+   ```bash
+   poetry run python scripts/generate_report.py
+   ```
+3. Verify `data/reports/` contains the saved HTML/TXT artifacts and confirm the email landed in your inbox.
 
 ## Setup
 
@@ -93,6 +108,12 @@ See `data_module/database_diagram.md` for the complete schema.
    APCA_API_KEY_ID=your_key
    APCA_API_SECRET_KEY=your_secret
    OPENAI_API_KEY=your_openai_key
+   SMTP_SERVER=smtp.example.com
+   SMTP_PORT=587
+   SMTP_USER=your_smtp_username
+   SMTP_PASSWORD=your_smtp_password
+   REPORT_FROM=reports@example.com
+   REPORT_TO=investor@example.com
    ```
 
 3. **Run daily snapshot**:
@@ -115,10 +136,12 @@ See `data_module/database_diagram.md` for the complete schema.
 ├── analyst_service/       # Analysis and AI agents
 │   ├── agents/            # CrewAI agents (bull/bear)
 │   ├── analysis/          # Analysis tools (sentiment, TA)
+│   ├── reporting/         # HTML rendering and email delivery
 │   └── main.py            # Entry point
 ├── scripts/               # Automated scripts
 │   ├── daily_snapshot.py  # Portfolio snapshot automation
-│   └── collect_news.py   # News collection automation
+│   ├── collect_news.py   # News collection automation
+│   └── generate_report.py # Weekly portfolio report and email
 └── data/                  # Database and exports
     └── portfolio.db       # SQLite database
 ```
@@ -127,7 +150,7 @@ See `data_module/database_diagram.md` for the complete schema.
 
 - `data_module/database_diagram.md` - Database schema (Mermaid ER diagram)
 - `data_module/data_manager_flowchart.md` - DataManager class flowchart
-- `analyst_service/IMPLEMENTATION_PLAN.md` - Future enhancements
+- `IMPLEMENTATION_PLAN.md` - Future enhancements
 
 ## Key Features
 
@@ -135,5 +158,5 @@ See `data_module/database_diagram.md` for the complete schema.
 ✅ **Database Storage**: Persistent storage of all portfolio and market data  
 ✅ **Performance Tracking**: Historical performance metrics and analysis  
 ✅ **News Integration**: News articles linked to trading symbols  
-✅ **AI Analysis**: CrewAI-powered market analysis with bull/bear perspectives  
-✅ **Automated Workflows**: GitHub Actions for daily data collection  
+✅ **AI Analysis**: CrewAI-powered market analysis with bull/bear perspectives
+✅ **Automated Workflows**: GitHub Actions for daily data collection and weekly email reports
