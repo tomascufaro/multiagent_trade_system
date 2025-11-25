@@ -1,0 +1,46 @@
+{
+  "timestamp": "2025-11-25T21:07:16.514258",
+  "current_positions": [
+    "AWK",
+    "WTRG",
+    "BTCUSD",
+    "MRVL"
+  ],
+  "universe_summary": {
+    "status_counts": {
+      "current": 4,
+      "watchlist": 1
+    },
+    "total_symbols": 5,
+    "frequent_trades": [
+      [
+        "AWK",
+        58
+      ],
+      [
+        "MRVL",
+        58
+      ],
+      [
+        "WTRG",
+        58
+      ],
+      [
+        "BTCUSD",
+        47
+      ]
+    ]
+  },
+  "snapshot_id": {
+    "timestamp": "2025-11-25T21:07:16.008016",
+    "account_id": "6be4d920-6015-4900-8506-354368617eea",
+    "total_equity": 99988.25,
+    "cash": 98362.89,
+    "invested_capital": 1625.3600000000006,
+    "unrealized_pnl": -11.004210057019776,
+    "realized_pnl": 0.0,
+    "total_pnl": -11.004210057019776,
+    "day_change": 20.75999999999476,
+    "day_change_pct": 0.020766751270832908
+  }
+}
