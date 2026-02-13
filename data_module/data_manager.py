@@ -6,9 +6,9 @@ Coordinates between API clients and data repositories, contains business logic.
 import os
 import pandas as pd
 from datetime import datetime
-from typing import Dict, List, Any, Set
+from typing import Dict, List, Any, Set, Optional
 
-from data_module.api_clients import PriceFeed, NewsFeed, AccountStatus, OpenPositions
+from data_module.api_clients import PriceFeed, NewsFeed
 from data_module.repositories import PortfolioRepository, NewsRepository, UniverseRepository
 
 
@@ -22,8 +22,6 @@ class DataManager:
         # API clients
         self.price_feed = PriceFeed(config_path)
         self.news_feed = NewsFeed(config_path)
-        self.account_status = AccountStatus()
-        self.open_positions = OpenPositions()
 
         # Data repositories
         self.portfolio_repo = PortfolioRepository()
@@ -46,28 +44,29 @@ class DataManager:
         }
 
     def get_position(self, symbol: str) -> Dict[str, Any]:
-        """Get current position for a symbol"""
-        positions = self.open_positions.get_positions()
-        for pos in positions:
+        """Get current holding for a symbol"""
+        holdings = self.portfolio_repo.get_holdings()
+        for pos in holdings:
             if pos.get('symbol') == symbol:
+                current_price = self.price_feed.get_current_price(symbol)
+                market_value = (pos.get('quantity') or 0) * (current_price or 0)
                 return {
                     'symbol': pos.get('symbol'),
-                    'side': 'LONG' if float(pos.get('qty', 0)) > 0 else 'SHORT',
-                    'qty': abs(float(pos.get('qty', 0))),
-                    'avg_entry_price': float(pos.get('avg_entry_price', 0)),
-                    'market_value': float(pos.get('market_value', 0))
+                    'side': 'LONG',
+                    'qty': pos.get('quantity'),
+                    'avg_entry_price': pos.get('avg_entry_price'),
+                    'market_value': market_value,
+                    'current_price': current_price,
                 }
         return None
 
     def get_portfolio_summary(self) -> Dict[str, Any]:
-        """Get current portfolio summary"""
-        account_data = self.account_status.get_status()
-        positions_data = self.open_positions.get_positions()
-
+        """Get current portfolio summary (manual holdings)."""
+        summary = self.get_portfolio_value()
         return {
-            'cash': float(account_data.get('cash', 0)),
-            'equity': float(account_data.get('equity', 0)),
-            'positions': positions_data,
+            'equity': summary.get('total_equity', 0),
+            'net_contributed': summary.get('net_contributed', 0),
+            'positions': summary.get('positions', []),
             'timestamp': datetime.now().isoformat()
         }
 
@@ -76,20 +75,13 @@ class DataManager:
     def save_portfolio_snapshot(self) -> Dict[str, Any]:
         """
         Save current portfolio state to database.
-        Business logic: fetches data from APIs, calculates metrics, saves to DB.
+        Business logic: calculates metrics from manual holdings, saves to DB.
         """
-        account_data = self.account_status.get_status()
-        positions_data = self.open_positions.get_positions()
-
-        # Calculate portfolio metrics
-        total_equity = float(account_data.get('equity', 0))
-        cash = float(account_data.get('cash', 0))
-        invested_capital = total_equity - cash
-
-        unrealized_pnl = sum(
-            float(pos.get('market_value', 0)) - float(pos.get('avg_entry_price', 0)) * abs(float(pos.get('qty', 0)))
-            for pos in positions_data
-        )
+        portfolio = self.get_portfolio_value()
+        positions_data = portfolio.get('positions', [])
+        total_equity = portfolio.get('total_equity', 0)
+        invested_capital = total_equity
+        unrealized_pnl = sum(float(pos.get('unrealized_pnl', 0)) for pos in positions_data)
 
         prev_equity = self.portfolio_repo.get_previous_equity()
         day_change = total_equity - prev_equity if prev_equity else 0
@@ -97,9 +89,9 @@ class DataManager:
 
         snapshot = {
             'timestamp': datetime.now().isoformat(),
-            'account_id': account_data.get('id'),
+            'account_id': None,
             'total_equity': total_equity,
-            'cash': cash,
+            'cash': 0.0,
             'invested_capital': invested_capital,
             'unrealized_pnl': unrealized_pnl,
             'realized_pnl': 0.0,
@@ -115,14 +107,14 @@ class DataManager:
         for pos in positions_data:
             symbol = pos.get('symbol')
             if symbol:
-                current_prices[symbol] = self.price_feed.get_current_price(symbol)
+                current_prices[symbol] = pos.get('current_price') or self.price_feed.get_current_price(symbol)
 
         self._save_positions_with_metrics(positions_data, current_prices, total_equity)
 
         return snapshot
 
     def _save_positions_with_metrics(self, positions_data: List[Dict], current_prices: Dict, total_equity: float):
-        """Helper to calculate and save position metrics"""
+        """Helper to calculate and save position metrics from manual holdings."""
         timestamp = datetime.now().isoformat()
         positions = []
 
@@ -131,10 +123,10 @@ class DataManager:
             if not symbol:
                 continue
 
-            current_price = current_prices.get(symbol, 0)
-            quantity = abs(float(pos.get('qty', 0)))
+            current_price = current_prices.get(symbol, 0) or 0
+            quantity = abs(float(pos.get('quantity', 0)))
             avg_entry_price = float(pos.get('avg_entry_price', 0))
-            market_value = float(pos.get('market_value', 0))
+            market_value = float(pos.get('market_value', 0)) or (quantity * current_price)
 
             cost_basis = quantity * avg_entry_price
             unrealized_pnl = market_value - cost_basis
@@ -144,7 +136,7 @@ class DataManager:
             positions.append({
                 'timestamp': timestamp,
                 'symbol': symbol,
-                'side': 'LONG' if float(pos.get('qty', 0)) > 0 else 'SHORT',
+                'side': 'LONG',
                 'quantity': quantity,
                 'avg_entry_price': avg_entry_price,
                 'current_price': current_price,
@@ -205,7 +197,7 @@ class DataManager:
 
     def update_universe(self) -> Set[str]:
         """Update portfolio universe with current positions"""
-        positions = self.open_positions.get_positions()
+        positions = self.portfolio_repo.get_holdings()
         current_symbols = set()
 
         for pos in positions:
@@ -215,7 +207,7 @@ class DataManager:
                 self.universe_repo.add_symbol(
                     symbol,
                     status='current',
-                    notes=f"Current position: {pos.get('qty', 0)} shares"
+                    notes=f"Current position: {pos.get('quantity', 0)} shares"
                 )
 
         self.universe_repo.mark_as_historical(current_symbols)
@@ -246,3 +238,257 @@ class DataManager:
             if not symbol or symbol in existing_symbols:
                 continue
             self.add_to_watchlist(symbol)
+
+    def record_deposit(self, amount: float, notes: Optional[str] = None) -> Dict[str, Any]:
+        """Record a capital deposit."""
+        assert amount > 0, "Deposit amount must be positive"
+        flow = {
+            'timestamp': datetime.now().isoformat(),
+            'type': 'DEPOSIT',
+            'amount': amount,
+            'notes': notes
+        }
+        self.portfolio_repo.save_capital_flow(flow)
+        return flow
+
+    def record_withdrawal(self, amount: float, notes: Optional[str] = None) -> Dict[str, Any]:
+        """Record a capital withdrawal."""
+        assert amount > 0, "Withdrawal amount must be positive"
+        flow = {
+            'timestamp': datetime.now().isoformat(),
+            'type': 'WITHDRAWAL',
+            'amount': amount,
+            'notes': notes
+        }
+        self.portfolio_repo.save_capital_flow(flow)
+        return flow
+
+    def record_buy(
+        self,
+        symbol: str,
+        quantity: float,
+        price: float,
+        fees: float = 0.0,
+        notes: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Record a buy trade and update holdings."""
+        import uuid
+
+        assert quantity > 0, "Quantity must be positive"
+        assert price > 0, "Price must be positive"
+
+        total_value = quantity * price
+        net_amount = total_value + fees
+
+        trade = {
+            'trade_id': f"trade_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}",
+            'timestamp': datetime.now().isoformat(),
+            'symbol': symbol.upper(),
+            'action': 'BUY',
+            'quantity': quantity,
+            'price': price,
+            'total_value': total_value,
+            'commission': 0.0,
+            'net_amount': net_amount,
+            'reason': notes or 'Manual trade entry',
+            'analysis_confidence': None,
+            'fees': fees,
+            'notes': notes,
+            'realized_pnl': None
+        }
+
+        self.portfolio_repo.save_trade(trade)
+        self._update_holding_after_buy(symbol, quantity, price)
+
+        print(f"✅ Bought {quantity} shares of {symbol} at ${price:.2f}")
+        print(f"   Total cost: ${net_amount:.2f} (including ${fees:.2f} fees)")
+
+        return trade
+
+    def record_sell(
+        self,
+        symbol: str,
+        quantity: float,
+        price: float,
+        fees: float = 0.0,
+        notes: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Record a sell trade and update holdings."""
+        import uuid
+
+        assert quantity > 0, "Quantity must be positive"
+        assert price > 0, "Price must be positive"
+
+        holding = self._get_holding(symbol)
+        if not holding:
+            raise ValueError(f"No open holding for {symbol}")
+        if holding['quantity'] < quantity:
+            raise ValueError(f"Insufficient quantity. Have {holding['quantity']}, trying to sell {quantity}")
+
+        total_value = quantity * price
+        net_amount = total_value - fees
+
+        cost_basis = holding['avg_entry_price'] * quantity
+        realized_pnl = total_value - cost_basis - fees
+
+        trade = {
+            'trade_id': f"trade_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}",
+            'timestamp': datetime.now().isoformat(),
+            'symbol': symbol.upper(),
+            'action': 'SELL',
+            'quantity': quantity,
+            'price': price,
+            'total_value': total_value,
+            'commission': 0.0,
+            'net_amount': net_amount,
+            'reason': notes or 'Manual trade entry',
+            'analysis_confidence': None,
+            'fees': fees,
+            'notes': notes,
+            'realized_pnl': realized_pnl
+        }
+
+        self.portfolio_repo.save_trade(trade)
+        self._update_holding_after_sell(symbol, quantity)
+
+        print(f"✅ Sold {quantity} shares of {symbol} at ${price:.2f}")
+        print(f"   Total received: ${net_amount:.2f} (after ${fees:.2f} fees)")
+        print(f"   Realized P&L: ${realized_pnl:.2f}")
+
+        return trade
+
+    def get_portfolio_value(self) -> Dict[str, Any]:
+        """Calculate current portfolio value from manual holdings."""
+        capital = self.portfolio_repo.get_capital_flow_summary()
+        net_contributed = capital['deposits'] - capital['withdrawals']
+
+        positions = self.portfolio_repo.get_holdings()
+
+        positions_value = 0.0
+        positions_data = []
+
+        for pos in positions:
+            symbol = pos['symbol']
+            quantity = pos['quantity']
+            avg_entry_price = pos['avg_entry_price']
+
+            current_price = self.price_feed.get_current_price(symbol)
+
+            market_value = quantity * (current_price or 0)
+            cost_basis = quantity * avg_entry_price
+            unrealized_pnl = market_value - cost_basis
+            unrealized_pnl_pct = (unrealized_pnl / cost_basis * 100) if cost_basis > 0 else 0
+
+            positions_value += market_value
+
+            positions_data.append({
+                'symbol': symbol,
+                'quantity': quantity,
+                'avg_entry_price': avg_entry_price,
+                'current_price': current_price,
+                'market_value': market_value,
+                'cost_basis': cost_basis,
+                'unrealized_pnl': unrealized_pnl,
+                'unrealized_pnl_pct': unrealized_pnl_pct
+            })
+
+        total_equity = positions_value
+        total_pnl = total_equity - net_contributed
+        total_pnl_pct = (total_pnl / net_contributed * 100) if net_contributed > 0 else 0
+
+        return {
+            'total_equity': total_equity,
+            'positions_value': positions_value,
+            'total_pnl': total_pnl,
+            'total_pnl_pct': total_pnl_pct,
+            'num_positions': len(positions_data),
+            'positions': positions_data,
+            'net_contributed': net_contributed,
+            'total_deposits': capital['deposits'],
+            'total_withdrawals': capital['withdrawals']
+        }
+
+    def get_open_positions(self) -> List[Dict[str, Any]]:
+        """Get all holdings with current prices."""
+        positions = self.portfolio_repo.get_holdings()
+
+        for pos in positions:
+            symbol = pos['symbol']
+            pos['current_price'] = self.price_feed.get_current_price(symbol)
+            pos['market_value'] = pos['quantity'] * (pos['current_price'] or 0)
+            pos['unrealized_pnl'] = pos['market_value'] - (pos['quantity'] * pos['avg_entry_price'])
+
+        return positions
+
+    def analyze_stock(self, symbol: str) -> Dict[str, Any]:
+        """Analyze a stock using existing AnalystService."""
+        from analyst_service.analysis.analyst_service import AnalystService
+
+        analyst = AnalystService(self.config_path)
+        analysis = analyst.analyze(symbol)
+
+        debate = analysis.get('debate', {})
+        summary = debate.get('summary', '')
+
+        recommendation = 'HOLD'
+        if 'strong buy' in summary.lower() or 'strongly recommend buying' in summary.lower():
+            recommendation = 'STRONG_BUY'
+        elif 'buy' in summary.lower() or 'bullish' in summary.lower():
+            recommendation = 'BUY'
+        elif 'sell' in summary.lower() or 'bearish' in summary.lower():
+            recommendation = 'SELL'
+
+        analysis_record = {
+            'symbol': symbol,
+            'analysis_date': datetime.now().isoformat(),
+            'recommendation': recommendation,
+            'confidence_score': debate.get('confidence', 0.5),
+            'current_price': self.price_feed.get_current_price(symbol),
+            'analyst_notes': summary,
+            'bull_case': debate.get('bull_perspective', ''),
+            'bear_case': debate.get('bear_perspective', ''),
+            'technical_signals': str(analysis.get('ta_signals', {}))
+        }
+
+        self.portfolio_repo.save_asset_analysis(analysis_record)
+
+        return analysis_record
+
+    def _get_holding(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get holding for symbol."""
+        holdings = self.portfolio_repo.get_holdings()
+        for pos in holdings:
+            if pos['symbol'] == symbol:
+                return pos
+        return None
+
+    def _update_holding_after_buy(self, symbol: str, quantity: float, price: float):
+        """Update or create holding after buy."""
+        holding = self._get_holding(symbol)
+
+        if holding:
+            old_qty = holding['quantity']
+            old_price = holding['avg_entry_price']
+            new_qty = old_qty + quantity
+            new_avg_price = ((old_qty * old_price) + (quantity * price)) / new_qty
+
+            self.portfolio_repo.update_holding(holding['id'], {
+                'quantity': new_qty,
+                'avg_entry_price': new_avg_price
+            })
+        else:
+            self.portfolio_repo.create_holding({
+                'symbol': symbol,
+                'quantity': quantity,
+                'avg_entry_price': price
+            })
+
+    def _update_holding_after_sell(self, symbol: str, quantity: float):
+        """Update holding after sell."""
+        holding = self._get_holding(symbol)
+        new_qty = holding['quantity'] - quantity
+
+        if new_qty <= 0:
+            self.portfolio_repo.delete_holding(holding['id'])
+        else:
+            self.portfolio_repo.update_holding(holding['id'], {'quantity': new_qty})

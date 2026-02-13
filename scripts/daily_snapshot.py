@@ -3,7 +3,7 @@
 Daily Portfolio Snapshot Script for GitHub Actions
 
 This script runs twice daily to:
-1. Update portfolio universe with current positions
+1. Update portfolio universe with current holdings
 2. Take portfolio snapshots
 3. Save data to the database
 4. Generate summary reports
@@ -35,8 +35,8 @@ def main():
         
         # 2. Take portfolio snapshot
         print("📸 Taking portfolio snapshot...")
-        snapshot_id = data_manager.save_portfolio_snapshot()
-        print(f"✅ Snapshot saved with ID: {snapshot_id}")
+        snapshot = data_manager.save_portfolio_snapshot()
+        print(f"✅ Snapshot saved with timestamp: {snapshot.get('timestamp')}")
         
         # 3. Get universe summary
         print("📈 Generating universe summary...")

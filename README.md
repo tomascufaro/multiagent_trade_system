@@ -15,8 +15,6 @@ The data module handles all data operations through a three-layer architecture:
 1. **API Clients** (`data_module/api_clients/`)
    - `PriceFeed` - Fetches current and historical price data from Alpaca
    - `NewsFeed` - Fetches news articles from Alpaca
-   - `AccountStatus` - Retrieves account information (equity, cash, etc.)
-   - `OpenPositions` - Gets current open positions
 
 2. **Repositories** (`data_module/repositories/`)
    - `PortfolioRepository` - Manages portfolio snapshots, positions, trades, and performance metrics
@@ -47,8 +45,6 @@ See `data_module/database_diagram.md` for the complete schema.
 - **Paper Trading Endpoint**: `https://paper-api.alpaca.markets`
 - **Data Endpoint**: `https://data.alpaca.markets`
 - **Endpoints Used**:
-  - `/v2/account` - Account status and equity
-  - `/v2/positions` - Open positions
   - `/v1beta1/news` - News articles
   - `/v1beta3/crypto/us/bars` - Price data (crypto)
 
@@ -58,7 +54,7 @@ See `data_module/database_diagram.md` for the complete schema.
 
 **Daily Portfolio Snapshots** (`scripts/daily_snapshot.py`)
 - Runs twice daily (market open and close)
-- Fetches current portfolio state from Alpaca
+- Calculates portfolio state from manual holdings
 - Calculates performance metrics
 - Saves snapshots and positions to database
 - Updates portfolio universe
@@ -124,6 +120,40 @@ See `data_module/database_diagram.md` for the complete schema.
 4. **Run analysis**:
    ```bash
    poetry run python analyst_service/main.py
+   ```
+
+## Manual Portfolio Management (Phase 1)
+
+This system supports manual portfolio tracking. You can:
+- Record deposits and withdrawals
+- Record buy/sell trades manually
+- Track portfolio value in real-time
+- Analyze stocks for investment recommendations
+- View trade history
+
+### Quick Start
+
+1. Run database migration:
+   ```bash
+   poetry run python scripts/migrate_to_phase1.py
+   ```
+
+2. Use the CLI:
+   ```bash
+   # Record a deposit
+   portfolio deposit 10000
+
+   # Record a trade
+   portfolio trade BUY AAPL 10 150.50
+
+   # View portfolio
+   portfolio show
+
+   # Analyze a stock
+   portfolio analyze AAPL
+
+   # View history
+   portfolio history
    ```
 
 ## Project Structure

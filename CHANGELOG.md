@@ -1,5 +1,28 @@
 # Changelog
 
+## [Phase 1] - 2026-02-12
+
+### Added
+- Manual portfolio tracking system
+- CLI interface with core commands (deposit, withdraw, trade, show, analyze, history)
+- Portfolio value calculation from manual holdings
+- Stock analysis using existing AI agents
+- Database tables: asset_analysis, holdings, capital_flows
+- Trade recording with fees, notes, realized P&L
+
+### Changed
+- DataManager enhanced with manual trade methods
+- Portfolio calculations now work from user holdings instead of Alpaca
+- Database schema updated with holdings, capital_flows, fees/notes/realized_pnl
+
+### Removed
+- Dependency on Alpaca account status API
+- Dependency on Alpaca positions API
+- Automated portfolio fetching (replaced with manual entry)
+
+### Breaking Changes
+- Portfolio must now be managed manually via CLI
+- Trades must be recorded manually after execution
 ## Unreleased
 
 - Added `analyst_service/reporting/html_renderer.py` to format portfolio analyses into styled HTML and `email_sender.py` to send reports via SMTP using environment configuration.

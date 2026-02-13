@@ -30,6 +30,7 @@ erDiagram
         REAL unrealized_pnl_pct
         REAL position_size_pct
         INTEGER days_held
+        TEXT notes
     }
     
     trades {
@@ -45,6 +46,26 @@ erDiagram
         REAL net_amount
         TEXT reason
         REAL analysis_confidence
+        REAL fees
+        TEXT notes
+        REAL realized_pnl
+    }
+
+    holdings {
+        INTEGER id PK
+        TEXT symbol UK
+        REAL quantity
+        REAL avg_entry_price
+        TEXT notes
+        TEXT updated_at
+    }
+
+    capital_flows {
+        INTEGER id PK
+        TEXT timestamp
+        TEXT type
+        REAL amount
+        TEXT notes
     }
     
     performance_metrics {
@@ -93,7 +114,7 @@ erDiagram
     
     %% Relationships
     portfolio_snapshots ||--o{ positions : "has"
-    positions ||--o{ trades : "generates"
+    holdings ||--o{ trades : "generates"
     portfolio_snapshots ||--o{ performance_metrics : "calculated_from"
     news_articles ||--o{ news_symbols : "linked_to"
 ```
@@ -104,6 +125,8 @@ erDiagram
 - **portfolio_snapshots**: Daily snapshots of overall portfolio performance
 - **positions**: Individual position details and performance tracking
 - **trades**: Record of all buy/sell transactions
+- **holdings**: Current open holdings (manual positions)
+- **capital_flows**: Deposits and withdrawals
 - **performance_metrics**: Calculated performance metrics by period
 
 ### News Tables
@@ -120,4 +143,3 @@ erDiagram
 - `portfolio_snapshots` → `performance_metrics`: Metrics calculated from snapshots
 - `news_articles` → `news_symbols`: Many-to-many relationship (articles can mention multiple symbols)
 - `portfolio_universe`: Standalone table tracking symbol metadata
-

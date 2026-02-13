@@ -9,7 +9,8 @@ from typing import Dict, List, Any
 
 class PortfolioRepository:
     def __init__(self, db_path: str = "data/portfolio.db"):
-        self.db_path = db_path
+        env_db_path = os.getenv("PORTFOLIO_DB_PATH")
+        self.db_path = env_db_path or db_path
         self._init_tables()
 
     def _init_tables(self):
@@ -49,7 +50,8 @@ class PortfolioRepository:
                 unrealized_pnl REAL,
                 unrealized_pnl_pct REAL,
                 position_size_pct REAL,
-                days_held INTEGER
+                days_held INTEGER,
+                notes TEXT
             )
         ''')
 
@@ -66,7 +68,31 @@ class PortfolioRepository:
                 commission REAL,
                 net_amount REAL,
                 reason TEXT,
-                analysis_confidence REAL
+                analysis_confidence REAL,
+                fees REAL,
+                notes TEXT,
+                realized_pnl REAL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS holdings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL UNIQUE,
+                quantity REAL NOT NULL,
+                avg_entry_price REAL NOT NULL,
+                notes TEXT,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS capital_flows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                notes TEXT
             )
         ''')
 
@@ -86,6 +112,22 @@ class PortfolioRepository:
                 total_trades INTEGER,
                 winning_trades INTEGER,
                 losing_trades INTEGER
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS asset_analysis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL,
+                analysis_date TEXT NOT NULL,
+                recommendation TEXT NOT NULL,
+                confidence_score REAL,
+                current_price REAL,
+                analyst_notes TEXT,
+                bull_case TEXT,
+                bear_case TEXT,
+                technical_signals TEXT,
+                UNIQUE(symbol, analysis_date)
             )
         ''')
 
@@ -134,6 +176,166 @@ class PortfolioRepository:
 
         conn.commit()
         conn.close()
+
+    def save_capital_flow(self, flow: Dict[str, Any]) -> int:
+        """Save a deposit or withdrawal."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO capital_flows (timestamp, type, amount, notes)
+            VALUES (?, ?, ?, ?)
+        ''', (flow['timestamp'], flow['type'], flow['amount'], flow.get('notes')))
+        flow_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return flow_id
+
+    def get_capital_flow_summary(self) -> Dict[str, float]:
+        """Get total deposits and withdrawals."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM capital_flows WHERE type = 'DEPOSIT'")
+        deposits = cursor.fetchone()[0]
+        cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM capital_flows WHERE type = 'WITHDRAWAL'")
+        withdrawals = cursor.fetchone()[0]
+        conn.close()
+        return {'deposits': deposits, 'withdrawals': withdrawals}
+
+    def save_trade(self, trade: Dict[str, Any]) -> int:
+        """Save a trade record."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO trades
+            (trade_id, timestamp, symbol, action, quantity, price, total_value,
+             commission, net_amount, reason, analysis_confidence, fees, notes, realized_pnl)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            trade['trade_id'], trade['timestamp'], trade['symbol'], trade['action'],
+            trade['quantity'], trade['price'], trade['total_value'], trade['commission'],
+            trade['net_amount'], trade['reason'], trade['analysis_confidence'],
+            trade.get('fees', 0.0), trade.get('notes'), trade.get('realized_pnl')
+        ))
+
+        trade_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return trade_id
+
+    def get_holdings(self) -> List[Dict[str, Any]]:
+        """Get all current holdings."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT id, symbol, quantity, avg_entry_price, notes
+            FROM holdings
+            ORDER BY symbol
+        ''')
+
+        columns = ['id', 'symbol', 'quantity', 'avg_entry_price', 'notes']
+        holdings = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        conn.close()
+        return holdings
+
+    def update_holding(self, holding_id: int, updates: Dict[str, Any]) -> bool:
+        """Update holding fields."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        set_clause = ', '.join([f"{key} = ?" for key in updates.keys()])
+        values = list(updates.values()) + [holding_id]
+
+        cursor.execute(f'''
+            UPDATE holdings
+            SET {set_clause}
+            WHERE id = ?
+        ''', values)
+
+        conn.commit()
+        success = cursor.rowcount > 0
+        conn.close()
+        return success
+
+    def create_holding(self, position: Dict[str, Any]) -> int:
+        """Create new holding."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO holdings
+            (symbol, quantity, avg_entry_price, notes, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            position['symbol'],
+            position['quantity'],
+            position['avg_entry_price'],
+            position.get('notes'),
+            datetime.now().isoformat()
+        ))
+
+        position_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return position_id
+
+    def delete_holding(self, holding_id: int) -> bool:
+        """Delete holding (position closed)."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM holdings WHERE id = ?', (holding_id,))
+        conn.commit()
+        success = cursor.rowcount > 0
+        conn.close()
+        return success
+
+    def save_asset_analysis(self, analysis: Dict[str, Any]) -> int:
+        """Save asset analysis to database."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT OR REPLACE INTO asset_analysis
+            (symbol, analysis_date, recommendation, confidence_score, current_price,
+             analyst_notes, bull_case, bear_case, technical_signals)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            analysis['symbol'], analysis['analysis_date'], analysis['recommendation'],
+            analysis.get('confidence_score'), analysis.get('current_price'),
+            analysis.get('analyst_notes'), analysis.get('bull_case'),
+            analysis.get('bear_case'), analysis.get('technical_signals')
+        ))
+
+        analysis_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return analysis_id
+
+    def get_trade_history(self, days: int = 30, symbol: str = None) -> List[Dict[str, Any]]:
+        """Get trade history."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        if symbol:
+            cursor.execute('''
+                SELECT * FROM trades
+                WHERE symbol = ? AND timestamp >= datetime('now', '-{} days')
+                ORDER BY timestamp DESC
+            '''.format(days), (symbol,))
+        else:
+            cursor.execute('''
+                SELECT * FROM trades
+                WHERE timestamp >= datetime('now', '-{} days')
+                ORDER BY timestamp DESC
+            '''.format(days))
+
+        columns = [desc[0] for desc in cursor.description]
+        trades = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        conn.close()
+        return trades
 
     def get_history(self, days: int = 30) -> pd.DataFrame:
         """Get portfolio history"""

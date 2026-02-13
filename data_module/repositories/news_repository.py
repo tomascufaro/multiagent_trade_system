@@ -7,7 +7,8 @@ from typing import Dict, List, Any
 
 class NewsRepository:
     def __init__(self, db_path: str = "data/portfolio.db"):
-        self.db_path = db_path
+        env_db_path = os.getenv("PORTFOLIO_DB_PATH")
+        self.db_path = env_db_path or db_path
         self._init_tables()
 
     def _init_tables(self):
@@ -104,4 +105,3 @@ class NewsRepository:
         conn.close()
 
         return articles
-
