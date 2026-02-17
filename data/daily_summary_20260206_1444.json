@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-02-06T14:44:44.079539",
+  "current_positions": [
+    "BTCUSD",
+    "MRVL",
+    "WTRG",
+    "AWK"
+  ],
+  "universe_summary": {
+    "status_counts": {
+      "current": 4,
+      "watchlist": 1
+    },
+    "total_symbols": 5,
+    "frequent_trades": [
+      [
+        "AWK",
+        161
+      ],
+      [
+        "MRVL",
+        161
+      ],
+      [
+        "WTRG",
+        161
+      ],
+      [
+        "BTCUSD",
+        148
+      ]
+    ]
+  },
+  "snapshot_id": {
+    "timestamp": "2026-02-06T14:44:42.941621",
+    "account_id": "6be4d920-6015-4900-8506-354368617eea",
+    "total_equity": 99878.38,
+    "cash": 98362.89,
+    "invested_capital": 1515.4900000000052,
+    "unrealized_pnl": -120.8723230570198,
+    "realized_pnl": 0.0,
+    "total_pnl": -120.8723230570198,
+    "day_change": 19.520000000004075,
+    "day_change_pct": 0.0195475894677789
+  }
+}
