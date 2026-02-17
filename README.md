@@ -153,8 +153,39 @@ This system supports manual portfolio tracking. You can:
    portfolio analyze AAPL
 
    # View history
-   portfolio history
+  portfolio history
+  ```
+
+## Web MVP (Phase 2)
+
+Phase 2 adds a minimal web UI and API that wrap Phase 1 functionality.
+
+### Run the web app
+
+1. Install dependencies (if not already):
+   ```bash
+   poetry install
    ```
+
+2. Start the API server:
+   ```bash
+   poetry run uvicorn backend.api.main:app --reload
+   ```
+
+3. Open in your browser:
+   - `http://localhost:8000`
+
+### Phase 2 testing
+
+Automated API test (mocked external price feed):
+```bash
+poetry run pytest tests/phase2/test_api_mvp.py
+```
+
+Manual smoke test (real API calls, requires server running):
+```bash
+poetry run python scripts/phase2_manual_smoke.py
+```
 
 ## Project Structure
 
