@@ -131,8 +131,100 @@ class PortfolioRepository:
             )
         ''')
 
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS daily_prices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL,
+                date TEXT NOT NULL,
+                close REAL NOT NULL,
+                UNIQUE(symbol, date)
+            )
+        ''')
+
         conn.commit()
         conn.close()
+
+    def save_daily_prices(self, prices: List[Dict[str, Any]]) -> int:
+        """Save daily prices (idempotent)."""
+        if not prices:
+            return 0
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.executemany(
+            """
+            INSERT OR IGNORE INTO daily_prices (symbol, date, close)
+            VALUES (?, ?, ?)
+            """,
+            [(p["symbol"], p["date"], p["close"]) for p in prices],
+        )
+        inserted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return inserted
+
+    def get_daily_prices(
+        self,
+        symbols: List[str],
+        start_date: str,
+        end_date: str,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Get daily prices per symbol between dates (inclusive)."""
+        if not symbols:
+            return {}
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        placeholders = ",".join("?" for _ in symbols)
+        query = f"""
+            SELECT symbol, date, close
+            FROM daily_prices
+            WHERE symbol IN ({placeholders})
+              AND date >= ? AND date <= ?
+            ORDER BY date ASC
+        """
+
+        cursor.execute(query, (*symbols, start_date, end_date))
+        rows = cursor.fetchall()
+        conn.close()
+
+        out: Dict[str, List[Dict[str, Any]]] = {s: [] for s in symbols}
+        for symbol, date, close in rows:
+            out[symbol].append({"date": date, "close": close})
+        return out
+
+    def get_latest_daily_prices(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Get the latest stored daily close for each symbol."""
+        if not symbols:
+            return {}
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        placeholders = ",".join("?" for _ in symbols)
+        query = f"""
+            SELECT dp.symbol, dp.date, dp.close
+            FROM daily_prices dp
+            INNER JOIN (
+                SELECT symbol, MAX(date) AS max_date
+                FROM daily_prices
+                WHERE symbol IN ({placeholders})
+                GROUP BY symbol
+            ) latest
+                ON dp.symbol = latest.symbol
+               AND dp.date = latest.max_date
+            ORDER BY dp.symbol
+        """
+
+        cursor.execute(query, symbols)
+        rows = cursor.fetchall()
+        conn.close()
+
+        return {
+            symbol: {"date": date, "close": float(close)}
+            for symbol, date, close in rows
+        }
 
     def save_snapshot(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
         """Save portfolio snapshot"""
@@ -240,6 +332,15 @@ class PortfolioRepository:
         conn.close()
         return holdings
 
+    def get_holding_symbols(self) -> List[str]:
+        """Get distinct symbols from current holdings."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT symbol FROM holdings ORDER BY symbol")
+        symbols = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return symbols
+
     def update_holding(self, holding_id: int, updates: Dict[str, Any]) -> bool:
         """Update holding fields."""
         conn = sqlite3.connect(self.db_path)
@@ -313,6 +414,38 @@ class PortfolioRepository:
         conn.close()
         return analysis_id
 
+    def get_latest_asset_analyses(self, symbols: List[str] | None = None) -> Dict[str, Dict[str, Any]]:
+        """Get the latest analysis row per symbol."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        params: List[Any] = []
+        symbol_filter = ""
+        if symbols:
+            placeholders = ",".join("?" for _ in symbols)
+            symbol_filter = f"WHERE symbol IN ({placeholders})"
+            params.extend(symbols)
+
+        query = f"""
+            SELECT aa.*
+            FROM asset_analysis aa
+            INNER JOIN (
+                SELECT symbol, MAX(analysis_date) AS latest_analysis_date
+                FROM asset_analysis
+                {symbol_filter}
+                GROUP BY symbol
+            ) latest
+                ON aa.symbol = latest.symbol
+               AND aa.analysis_date = latest.latest_analysis_date
+            ORDER BY aa.symbol
+        """
+
+        cursor.execute(query, params)
+        columns = [desc[0] for desc in cursor.description]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        conn.close()
+        return {row["symbol"]: row for row in rows}
+
     def get_trade_history(self, days: int = 30, symbol: str = None) -> List[Dict[str, Any]]:
         """Get trade history."""
         conn = sqlite3.connect(self.db_path)
@@ -336,6 +469,51 @@ class PortfolioRepository:
 
         conn.close()
         return trades
+
+    def get_all_trades(self) -> List[Dict[str, Any]]:
+        """Get all trades."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM trades ORDER BY timestamp ASC")
+        columns = [desc[0] for desc in cursor.description]
+        trades = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        conn.close()
+        return trades
+
+    def get_capital_flows(self) -> List[Dict[str, Any]]:
+        """Get all capital flows."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM capital_flows ORDER BY timestamp ASC")
+        columns = [desc[0] for desc in cursor.description]
+        flows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        conn.close()
+        return flows
+
+    def get_trade_symbols(self) -> List[str]:
+        """Get distinct symbols from all trades."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT symbol FROM trades ORDER BY symbol")
+        symbols = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return symbols
+
+    def get_realized_pnl_by_symbol(self) -> Dict[str, float]:
+        """Get realized P&L grouped by symbol."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT symbol, COALESCE(SUM(realized_pnl), 0)
+            FROM trades
+            WHERE action = 'SELL'
+            GROUP BY symbol
+            """
+        )
+        result = {row[0]: float(row[1] or 0) for row in cursor.fetchall()}
+        conn.close()
+        return result
 
     def get_history(self, days: int = 30) -> pd.DataFrame:
         """Get portfolio history"""

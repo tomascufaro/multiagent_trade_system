@@ -1,8 +1,8 @@
-"""Manual smoke test for Phase 2 web MVP.
+"""Manual smoke test for the local API.
 
 Prerequisites:
 - Run: poetry run uvicorn backend.api.main:app --reload
-- Ensure .env contains API keys if you want real price/news calls
+- Ensure .env contains any required API keys for live integrations
 
 This script calls the local API endpoints and prints results.
 """
@@ -28,7 +28,7 @@ def _get(path: str):
 
 
 def main():
-    print("Phase 2 Manual Smoke Test")
+    print("Manual API Smoke Test")
 
     print("\n1) Deposit")
     print(_post("/api/deposit", {"amount": 1000, "notes": "manual smoke"}))

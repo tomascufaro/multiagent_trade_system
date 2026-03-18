@@ -40,6 +40,15 @@
 - Extended `BullAgent` and `BearAgent` with `create_portfolio_task()` methods for portfolio-oriented prompts, while keeping symbol-level analysis intact.
 - Updated `DebateManager` with `conduct_portfolio_debate()` to orchestrate a portfolio-level CrewAI run using the new portfolio tasks.
 - Updated `analyst_service/main.py` to call the portfolio-level flow and print a concise portfolio analyst report (equity, cash, positions count, and debate summary).
+- Added a `daily_prices` table plus idempotent repository methods for storing and querying end-of-day prices.
+- Added `DataManager.collect_daily_prices()` and `DataManager.backfill_daily_prices()` plus `scripts/backfill_prices.py` to build the normalized price history used by metrics and the equity curve.
+- Added deterministic per-asset metrics and technical signal computation in `DataManager.compute_asset_metrics()` using `daily_prices` and the shared TA module.
+- Extended `analyst_service/analysis/ta_signals.py` with SMA50/200 support for metrics-first signal classification.
+- Added `GET /api/portfolio/asset-metrics`, `GET /api/portfolio/equity-curve`, and `GET /api/portfolio/performance` in `backend/api/main.py`.
+- Reworked the frontend into a metrics-first dashboard with summary cards, an equity curve chart, expandable asset rows, and a transaction modal.
+- Updated `scripts/daily_snapshot.py` to collect daily prices before saving the portfolio snapshot.
+- Added domain-based tests under `tests/api/`, `tests/data_manager/`, `tests/repositories/`, and `tests/services/` for the new Phase 3 behavior.
+- Added manual validation helpers under `tests/manual/` for API smoke, price feed smoke, and AI analysis smoke checks.
 
 ### Breaking changes
 
@@ -52,3 +61,5 @@
 ### Conversation summary
 
 We refocused the analyst service from symbol-level trading decisions to a portfolio-level debate between bull and bear agents. The current flow builds a portfolio context (positions, cash/equity, tracked symbols, and recent news), feeds it into a single CrewAI debate via new portfolio-specific tasks, and prints a portfolio report that aggregates bull/bear arguments and summarizes overall risk stance. TA tools remain available for symbol-level analysis, but are explicitly disabled for the portfolio debate to keep this version focused on DB-backed context and news; further refinements can deepen the narrative report or reintroduce TA in a controlled way later.
+
+The web product has also moved beyond the original Phase 2 MVP into a Phase 3 metrics-first dashboard. Current implementation centers the UI on deterministic metrics and technical signals, computes the equity curve from normalized stored facts, and keeps AI analysis explicitly user-triggered. Cached analysis is intended to be shown when it exists; otherwise the UI should display `Not analyzed` until the user requests a run.

@@ -5,16 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Portfolio MVP</title>
     <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
   </head>
   <body>
     <main class="container">
       <header class="header">
         <div>
-          <h1>Portfolio MVP</h1>
-          <p>Thin UI for Phase 1 verification</p>
+          <h1>Portfolio Dashboard</h1>
+          <p>Metrics-first view with optional AI analysis</p>
         </div>
         <div class="actions">
-          <button id="refresh" class="btn">Refresh</button>
+          <button id="addTransaction" class="btn">Add Transaction</button>
+          <button id="refresh" class="btn secondary">Refresh</button>
         </div>
       </header>
 
@@ -38,119 +40,39 @@
               <div class="label">Positions</div>
               <div class="value" id="numPositions">--</div>
             </div>
+            <div>
+              <div class="label">Total Return</div>
+              <div class="value" id="totalReturn">--</div>
+            </div>
+            <div>
+              <div class="label">Max Drawdown</div>
+              <div class="value" id="maxDrawdown">--</div>
+            </div>
           </div>
         </div>
 
-        <div class="card">
-          <h2>Capital Flow</h2>
-          <form id="flowForm" class="form">
-            <div class="row">
-              <label>
-                Type
-                <select id="flowType">
-                  <option value="deposit">Deposit</option>
-                  <option value="withdraw">Withdraw</option>
-                </select>
-              </label>
-              <label>
-                Amount
-                <input id="flowAmount" type="number" min="0" step="0.01" required />
-              </label>
-            </div>
-            <label>
-              Notes
-              <input id="flowNotes" type="text" />
-            </label>
-            <button class="btn" type="submit">Submit</button>
-          </form>
-        </div>
-
-        <div class="card">
-          <h2>Trade</h2>
-          <form id="tradeForm" class="form">
-            <div class="row">
-              <label>
-                Action
-                <select id="tradeAction">
-                  <option value="BUY">BUY</option>
-                  <option value="SELL">SELL</option>
-                </select>
-              </label>
-              <label>
-                Symbol
-                <input id="tradeSymbol" type="text" maxlength="10" required />
-              </label>
-            </div>
-            <div class="row">
-              <label>
-                Quantity
-                <input id="tradeQuantity" type="number" min="0" step="0.0001" required />
-              </label>
-              <label>
-                Price
-                <input id="tradePrice" type="number" min="0" step="0.01" required />
-              </label>
-            </div>
-            <div class="row">
-              <label>
-                Fees
-                <input id="tradeFees" type="number" min="0" step="0.01" value="0" />
-              </label>
-              <label>
-                Notes
-                <input id="tradeNotes" type="text" />
-              </label>
-            </div>
-            <button class="btn" type="submit">Record Trade</button>
-          </form>
-        </div>
-
-        <div class="card">
-          <h2>Analyze</h2>
-          <form id="analysisForm" class="form">
-            <div class="row">
-              <label>
-                Symbol
-                <input id="analysisSymbol" type="text" maxlength="10" required />
-              </label>
-              <div class="stretch"></div>
-            </div>
-            <button class="btn" type="submit">Analyze</button>
-          </form>
-          <pre id="analysisResult" class="result"></pre>
+        <div class="card full">
+          <h2>Equity Curve</h2>
+          <canvas id="equityChart" height="120"></canvas>
         </div>
       </section>
 
       <section class="grid">
         <div class="card full">
-          <h2>Positions</h2>
-          <table class="table" id="positionsTable">
+          <div class="table-header">
+            <h2>Asset Metrics</h2>
+            <span class="muted">Expand a row for detail</span>
+          </div>
+          <table class="table" id="metricsTable">
             <thead>
               <tr>
                 <th>Symbol</th>
-                <th>Qty</th>
-                <th>Avg Cost</th>
-                <th>Current</th>
-                <th>Value</th>
-                <th>P&amp;L</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-
-        <div class="card full">
-          <h2>Trades (Last 30 days)</h2>
-          <table class="table" id="tradesTable">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Action</th>
-                <th>Symbol</th>
-                <th>Qty</th>
                 <th>Price</th>
-                <th>Total</th>
-                <th>Fees</th>
+                <th>Pos %</th>
+                <th>Unrealized P&amp;L</th>
+                <th>Signals</th>
+                <th>Analyze</th>
+                <th></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -158,6 +80,99 @@
         </div>
       </section>
     </main>
+
+    <div class="modal" id="transactionModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal-content" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h3>Add Transaction</h3>
+          <button class="icon-btn" data-close>&times;</button>
+        </div>
+        <div class="modal-tabs">
+          <button class="tab active" data-tab="deposit">Deposit</button>
+          <button class="tab" data-tab="withdraw">Withdraw</button>
+          <button class="tab" data-tab="buy">Buy</button>
+          <button class="tab" data-tab="sell">Sell</button>
+        </div>
+        <div class="modal-body">
+          <form id="flowForm" class="form" data-form="deposit">
+            <label>
+              Amount
+              <input id="flowAmount" type="number" min="0" step="0.01" required />
+            </label>
+            <label>
+              Notes
+              <input id="flowNotes" type="text" />
+            </label>
+            <button class="btn" type="submit">Submit Deposit</button>
+          </form>
+
+          <form id="withdrawForm" class="form hidden" data-form="withdraw">
+            <label>
+              Amount
+              <input id="withdrawAmount" type="number" min="0" step="0.01" required />
+            </label>
+            <label>
+              Notes
+              <input id="withdrawNotes" type="text" />
+            </label>
+            <button class="btn" type="submit">Submit Withdrawal</button>
+          </form>
+
+          <form id="buyForm" class="form hidden" data-form="buy">
+            <label>
+              Symbol
+              <input id="buySymbol" type="text" maxlength="10" required />
+            </label>
+            <div class="row">
+              <label>
+                Quantity
+                <input id="buyQuantity" type="number" min="0" step="0.0001" required />
+              </label>
+              <label>
+                Price
+                <input id="buyPrice" type="number" min="0" step="0.01" required />
+              </label>
+            </div>
+            <label>
+              Fees
+              <input id="buyFees" type="number" min="0" step="0.01" value="0" />
+            </label>
+            <label>
+              Notes
+              <input id="buyNotes" type="text" />
+            </label>
+            <button class="btn" type="submit">Record Buy</button>
+          </form>
+
+          <form id="sellForm" class="form hidden" data-form="sell">
+            <label>
+              Symbol
+              <input id="sellSymbol" type="text" maxlength="10" required />
+            </label>
+            <div class="row">
+              <label>
+                Quantity
+                <input id="sellQuantity" type="number" min="0" step="0.0001" required />
+              </label>
+              <label>
+                Price
+                <input id="sellPrice" type="number" min="0" step="0.01" required />
+              </label>
+            </div>
+            <label>
+              Fees
+              <input id="sellFees" type="number" min="0" step="0.01" value="0" />
+            </label>
+            <label>
+              Notes
+              <input id="sellNotes" type="text" />
+            </label>
+            <button class="btn" type="submit">Record Sell</button>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <script src="/static/app.js"></script>
   </body>

@@ -54,6 +54,20 @@ def root() -> FileResponse:
 def portfolio_summary():
     return _dm.get_portfolio_value()
 
+@app.get("/api/portfolio/asset-metrics")
+def asset_metrics(days: int = 90):
+    return _dm.compute_asset_metrics(days=days)
+
+@app.get("/api/portfolio/equity-curve")
+def equity_curve(days: int = 90):
+    return _dm.compute_equity_curve(days=days)
+
+@app.get("/api/portfolio/performance")
+def performance(period: str = "30d"):
+    if period not in {"30d", "all_time"}:
+        raise HTTPException(status_code=400, detail="period must be 30d or all_time")
+    return _dm.calculate_performance_metrics(period)
+
 
 @app.get("/api/positions")
 def positions():
@@ -87,6 +101,11 @@ def withdraw(flow: CapitalFlowCreate):
 @app.post("/api/analysis/{symbol}")
 def analyze(symbol: str):
     return _dm.analyze_stock(symbol)
+
+
+@app.get("/api/analysis/latest")
+def latest_analysis():
+    return _dm.portfolio_repo.get_latest_asset_analyses()
 
 
 # Static assets (JS/CSS)

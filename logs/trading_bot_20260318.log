@@ -1,0 +1,4 @@
+2026-03-18 15:15:22,065 - generate_report - INFO - Starting weekly portfolio analysis
+2026-03-18 15:15:22,070 - generate_report - INFO - Sending HTML email
+2026-03-18 15:15:22,073 - generate_report - INFO - Saving report artifacts to /var/folders/jz/zxgs8wmn7vgcqd5tqb1p2n0h0000gp/T/tmp7y27krow
+2026-03-18 15:15:22,076 - generate_report - INFO - Report generation complete

@@ -1,223 +1,249 @@
 # Portfolio Analyst Service
 
-A data-driven portfolio analysis system that ingests external market data and personal portfolio information to provide comprehensive market analysis and insights.
+Single-user portfolio tracking and analysis application built around manual trade entry, a FastAPI backend, a vanilla JS dashboard, and optional AI-generated analysis.
 
-## Overview
+## What It Is
 
-This is an **analyst service**, not a trading bot. It collects data from external APIs, tracks your personal portfolio, stores everything in a database, and uses AI agents to analyze the information and provide insights.
+This project is not an automated trading bot. The current product is:
+
+- A manual portfolio ledger for deposits, withdrawals, buys, and sells
+- A local web dashboard with portfolio summary, asset metrics, equity curve, and transaction entry
+- A data layer that stores portfolio facts in SQLite and derives views from them
+- An optional AI analysis flow for symbol-level and portfolio-level commentary
+- A weekly email reporting flow driven by GitHub Actions
+
+## Current Product Surface
+
+### Manual portfolio workflow
+
+You manage the portfolio by recording:
+
+- Deposits and withdrawals
+- Buy and sell trades
+- Optional notes and fees on trades
+
+Holdings are derived from the recorded trade history and stored in SQLite for current-state reads.
+
+### Web dashboard
+
+The dashboard is served by the FastAPI app and currently provides:
+
+- Summary cards for equity, P&L, net contributions, total return, and max drawdown
+- Asset metrics table with deterministic metrics and technical signal summaries
+- Expandable detail rows for RSI, MACD, SMA50/200, EMA20, EMA50, returns, volatility, drawdown, and realized P&L
+- Equity curve chart derived from trades, capital flows, and stored daily prices
+- Transaction modal for deposit, withdrawal, buy, and sell entry
+- Analyze button for on-demand AI analysis per symbol
+- Latest cached analysis is loaded from `asset_analysis` on page load when present
+
+### CLI
+
+The `portfolio` CLI is available through Poetry script entrypoints and supports:
+
+- `portfolio deposit`
+- `portfolio withdraw`
+- `portfolio trade`
+- `portfolio show`
+- `portfolio analyze`
+- `portfolio history`
+
+### Automated workflows
+
+- `scripts/daily_snapshot.py` updates the tracked universe, stores daily prices, saves a portfolio snapshot, and writes a JSON run summary
+- `scripts/collect_news.py` fetches Alpaca news for tracked symbols and stores the results
+- `scripts/backfill_prices.py` backfills `daily_prices` for held or previously traded symbols
+- `scripts/generate_report.py` runs portfolio analysis, renders HTML, emails it, and saves artifacts under `data/reports/`
 
 ## Architecture
 
-### Data Module
+### Data layer
 
-The data module handles all data operations through a three-layer architecture:
+The application uses a small layered architecture:
 
-1. **API Clients** (`data_module/api_clients/`)
-   - `PriceFeed` - Fetches current and historical price data from Alpaca
-   - `NewsFeed` - Fetches news articles from Alpaca
+1. API clients in `data_module/api_clients/`
+   - `PriceFeed` fetches stock bar data from Alpaca
+   - `NewsFeed` fetches news from Alpaca
+2. Repositories in `data_module/repositories/`
+   - `PortfolioRepository`
+   - `NewsRepository`
+   - `UniverseRepository`
+3. `DataManager` in `data_module/data_manager.py`
+   - orchestrates reads and writes
+   - calculates derived metrics
+   - coordinates price/news collection and portfolio analysis flows
 
-2. **Repositories** (`data_module/repositories/`)
-   - `PortfolioRepository` - Manages portfolio snapshots, positions, trades, and performance metrics
-   - `NewsRepository` - Stores and queries news articles linked to symbols
-   - `UniverseRepository` - Tracks symbols in your portfolio (current and historical)
+### Storage
 
-3. **Data Manager** (`data_module/data_manager.py`)
-   - Orchestrates data operations between API clients and repositories
-   - Contains business logic for calculations (PnL, returns, metrics)
-   - Provides unified interface for data access
+SQLite database: `data/portfolio.db`
 
-### Database
+Core tables:
 
-SQLite database (`data/portfolio.db`) stores:
-- **Portfolio snapshots** - Daily portfolio performance metrics
-- **Positions** - Historical position data with P&L tracking
-- **Trades** - Complete trade history with reasons and confidence
-- **Performance metrics** - Calculated returns, Sharpe ratio, drawdown
-- **News articles** - News linked to trading symbols
-- **Portfolio universe** - Symbol tracking and metadata
+- `holdings`
+- `trades`
+- `capital_flows`
+- `daily_prices`
+- `portfolio_snapshots`
+- `asset_analysis`
+- news and universe tracking tables
 
-See `data_module/database_diagram.md` for the complete schema.
+### Backend and frontend
 
-## External APIs
+- FastAPI backend: `backend/api/main.py`
+- Frontend: `frontend/index.html`, `frontend/app.js`, `frontend/styles.css`
+- Static frontend assets are served by the FastAPI app
 
-### Alpaca Markets API
+### AI analysis
 
-- **Paper Trading Endpoint**: `https://paper-api.alpaca.markets`
-- **Data Endpoint**: `https://data.alpaca.markets`
-- **Endpoints Used**:
-  - `/v1beta1/news` - News articles
-  - `/v1beta3/crypto/us/bars` - Price data (crypto)
+AI analysis is optional and depends on `OPENAI_API_KEY` plus the CrewAI-based analysis stack under `analyst_service/`.
 
-## Main Functionality
+Current implemented flows:
 
-### Automated Data Collection
+- Symbol-level analysis on demand through `POST /api/analysis/{symbol}`
+- Portfolio-level analysis used by the reporting script
 
-**Daily Portfolio Snapshots** (`scripts/daily_snapshot.py`)
-- Runs twice daily (market open and close)
-- Calculates portfolio state from manual holdings
-- Calculates performance metrics
-- Saves snapshots and positions to database
-- Updates portfolio universe
+## External Dependencies
 
-**News Collection** (`scripts/collect_news.py`)
-- Fetches news for all tracked symbols
-- Saves articles to database with symbol relationships
-- Runs via GitHub Actions
+### Alpaca
 
-### Analysis Service
+Implemented API usage:
 
-**Analyst Service** (`analyst_service/`)
-- Uses CrewAI agents (bull and bear analysts) for portfolio-level analysis
-- Combines database-backed portfolio context (positions, performance, news) and optional technical analysis
-- Produces portfolio-focused insights and risk stance instead of direct trading instructions
+- Stock bars endpoint via `https://data.alpaca.markets/v2/stocks/bars`
+- News endpoint via `https://data.alpaca.markets/v1beta1/news`
 
-**Components**:
-- `AnalystService` - Main analysis orchestrator (symbol-level and portfolio-level flows)
-- `BullAgent` / `BearAgent` - AI agents for bullish/bearish analysis and debates
-- `TechnicalAnalysis` - RSI, MACD, EMA signals (used primarily for symbol-level TA)
-- `reporting/` - HTML renderer and SMTP sender for weekly portfolio emails
+### OpenAI / CrewAI
 
-### Weekly HTML Email Report
-
-- `scripts/generate_report.py` runs a portfolio analysis, renders an HTML summary, emails it to recipients from env vars, and saves a copy under `data/reports/`.
-- GitHub Actions workflow `portfolio-report.yml` triggers every Friday at 22:00 UTC (and on-demand) to produce the weekly email report.
-
-#### Send a test email locally
-
-1. Populate a local `.env` with the SMTP values shown below. The script automatically loads this file.
-2. Run the report generator (it will send the HTML email and save artifacts):
-   ```bash
-   poetry run python scripts/generate_report.py
-   ```
-3. Verify `data/reports/` contains the saved HTML/TXT artifacts and confirm the email landed in your inbox.
+Required only for AI analysis and weekly portfolio reports.
 
 ## Setup
 
-1. **Install dependencies**:
-   ```bash
-   poetry install
-   ```
+1. Install dependencies:
 
-2. **Configure environment**:
-   Create a `.env` file with:
-   ```
-   APCA_API_KEY_ID=your_key
-   APCA_API_SECRET_KEY=your_secret
-   OPENAI_API_KEY=your_openai_key
-   SMTP_SERVER=smtp.example.com
-   SMTP_PORT=587
-   SMTP_USER=your_smtp_username
-   SMTP_PASSWORD=your_smtp_password
-   REPORT_FROM=reports@example.com
-   REPORT_TO=investor@example.com
-   ```
-
-3. **Run daily snapshot**:
-   ```bash
-   poetry run python scripts/daily_snapshot.py
-   ```
-
-4. **Run analysis**:
-   ```bash
-   poetry run python analyst_service/main.py
-   ```
-
-## Manual Portfolio Management (Phase 1)
-
-This system supports manual portfolio tracking. You can:
-- Record deposits and withdrawals
-- Record buy/sell trades manually
-- Track portfolio value in real-time
-- Analyze stocks for investment recommendations
-- View trade history
-
-### Quick Start
-
-1. Run database migration:
-   ```bash
-   poetry run python scripts/migrate_to_phase1.py
-   ```
-
-2. Use the CLI:
-   ```bash
-   # Record a deposit
-   portfolio deposit 10000
-
-   # Record a trade
-   portfolio trade BUY AAPL 10 150.50
-
-   # View portfolio
-   portfolio show
-
-   # Analyze a stock
-   portfolio analyze AAPL
-
-   # View history
-  portfolio history
-  ```
-
-## Web MVP (Phase 2)
-
-Phase 2 adds a minimal web UI and API that wrap Phase 1 functionality.
-
-### Run the web app
-
-1. Install dependencies (if not already):
-   ```bash
-   poetry install
-   ```
-
-2. Start the API server:
-   ```bash
-   poetry run uvicorn backend.api.main:app --reload
-   ```
-
-3. Open in your browser:
-   - `http://localhost:8000`
-
-### Phase 2 testing
-
-Automated API test (mocked external price feed):
 ```bash
-poetry run pytest tests/phase2/test_api_mvp.py
+poetry install
 ```
 
-Manual smoke test (real API calls, requires server running):
+2. Create `.env`:
+
+```env
+APCA_API_KEY_ID=your_key
+APCA_API_SECRET_KEY=your_secret
+OPENAI_API_KEY=your_openai_key
+SMTP_SERVER=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your_smtp_username
+SMTP_PASSWORD=your_smtp_password
+REPORT_FROM=reports@example.com
+REPORT_TO=investor@example.com
+```
+
+3. Optional: seed or backfill price history for existing symbols:
+
 ```bash
-poetry run python scripts/phase2_manual_smoke.py
+poetry run python scripts/backfill_prices.py
 ```
 
-## Project Structure
+## Running The App
 
+### Web app
+
+Start the server:
+
+```bash
+poetry run uvicorn backend.api.main:app --reload
 ```
-├── data_module/          # Data ingestion and storage
-│   ├── api_clients/       # External API integrations
-│   ├── repositories/      # Database access layer
-│   └── data_manager.py    # Orchestration layer
-├── analyst_service/       # Analysis and AI agents
-│   ├── agents/            # CrewAI agents (bull/bear)
-│   ├── analysis/          # Analysis tools (sentiment, TA)
-│   ├── reporting/         # HTML rendering and email delivery
-│   └── main.py            # Entry point
-├── scripts/               # Automated scripts
-│   ├── daily_snapshot.py  # Portfolio snapshot automation
-│   ├── collect_news.py   # News collection automation
-│   └── generate_report.py # Weekly portfolio report and email
-└── data/                  # Database and exports
-    └── portfolio.db       # SQLite database
+
+Open:
+
+- `http://localhost:8000`
+
+### CLI examples
+
+```bash
+portfolio deposit 10000 --notes "Initial funding"
+portfolio trade BUY AAPL 10 150.50 --fees 1.50 --notes "Entry"
+portfolio show
+portfolio history --days 30
+```
+
+### Snapshot and data collection
+
+```bash
+poetry run python scripts/daily_snapshot.py
+poetry run python scripts/collect_news.py
+```
+
+### Run analysis directly
+
+```bash
+poetry run python analyst_service/main.py
+```
+
+### Demo seed for full UI testing
+
+If you want a safe, non-production dataset with visible metrics, realized P&L, and an equity curve:
+
+```bash
+poetry run python scripts/seed_demo_portfolio.py
+APCA_API_KEY_ID= APCA_API_SECRET_KEY= PORTFOLIO_DB_PATH=data/demo_portfolio.db poetry run uvicorn backend.api.main:app --reload
+```
+
+The demo database contains:
+
+- 3 seeded stocks: `AAPL`, `MSFT`, `NVDA`
+- 4 weeks of business-day close prices
+- deposits, a withdrawal, buys, and partial sells
+- current holdings plus realized and unrealized P&L
+- cached analysis rows in `asset_analysis` that appear in the dashboard without running live AI
+
+If you want to test live AI analysis on top of the seeded portfolio, launch the app with valid Alpaca and OpenAI credentials and then click `Analyze` in the UI.
+
+### Generate weekly report locally
+
+```bash
+poetry run python scripts/generate_report.py
+```
+
+## API Surface
+
+Implemented endpoints:
+
+- `GET /`
+- `GET /api/portfolio/summary`
+- `GET /api/portfolio/asset-metrics`
+- `GET /api/portfolio/equity-curve`
+- `GET /api/portfolio/performance`
+- `GET /api/positions`
+- `GET /api/trades`
+- `GET /api/analysis/latest`
+- `POST /api/trades`
+- `POST /api/deposit`
+- `POST /api/withdraw`
+- `POST /api/analysis/{symbol}`
+
+## Testing
+
+Run the automated suite:
+
+```bash
+poetry run pytest
+```
+
+Manual smoke checks for live integrations:
+
+```bash
+poetry run python tests/manual/api_smoke.py
+poetry run python tests/manual/price_feed_smoke.py AAPL
+poetry run python tests/manual/analysis_smoke.py AAPL
 ```
 
 ## Documentation
 
-- `data_module/database_diagram.md` - Database schema (Mermaid ER diagram)
-- `data_module/data_manager_flowchart.md` - DataManager class flowchart
-- `IMPLEMENTATION_PLAN.md` - Future enhancements
+- `data_module/database_diagram.md` - SQLite schema and table relationships
+- `data_module/data_architecture.md` - data flow across clients, repositories, and `DataManager`
+- `backend/api_diagram.md` - FastAPI route map and request flow
 
-## Key Features
+## Known Gaps
 
-✅ **Data Ingestion**: Automated collection of portfolio and market data  
-✅ **Database Storage**: Persistent storage of all portfolio and market data  
-✅ **Performance Tracking**: Historical performance metrics and analysis  
-✅ **News Integration**: News articles linked to trading symbols  
-✅ **AI Analysis**: CrewAI-powered market analysis with bull/bear perspectives
-✅ **Automated Workflows**: GitHub Actions for daily data collection and weekly email reports
+- Live analysis and live price collection still depend on valid Alpaca, OpenAI, and SMTP credentials
+- There is no authentication or multi-user support
+- The app is optimized for a single local operator, not a hosted SaaS deployment

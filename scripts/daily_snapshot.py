@@ -33,18 +33,23 @@ def main():
         current_symbols = data_manager.update_universe()
         print(f"✅ Current positions: {list(current_symbols)}")
         
-        # 2. Take portfolio snapshot
+        # 2. Collect daily prices
+        print("💾 Collecting daily prices...")
+        inserted = data_manager.collect_daily_prices()
+        print(f"✅ Stored {inserted} daily price rows")
+
+        # 3. Take portfolio snapshot
         print("📸 Taking portfolio snapshot...")
         snapshot = data_manager.save_portfolio_snapshot()
         print(f"✅ Snapshot saved with timestamp: {snapshot.get('timestamp')}")
         
-        # 3. Get universe summary
+        # 4. Get universe summary
         print("📈 Generating universe summary...")
         universe_summary = data_manager.get_universe_summary()
         print(f"✅ Tracking {universe_summary['total_symbols']} symbols")
         print(f"   Status breakdown: {universe_summary['status_counts']}")
         
-        # 4. Save summary to file for GitHub Actions
+        # 5. Save summary to file for GitHub Actions
         summary_file = project_root / "data" / f"daily_summary_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
         import json
         with open(summary_file, 'w') as f:
@@ -52,7 +57,7 @@ def main():
                 'timestamp': datetime.now().isoformat(),
                 'current_positions': list(current_symbols),
                 'universe_summary': universe_summary,
-                'snapshot_id': snapshot_id
+                'snapshot_id': snapshot.get('id')
             }, f, indent=2)
         
         print(f"✅ Summary saved to {summary_file}")

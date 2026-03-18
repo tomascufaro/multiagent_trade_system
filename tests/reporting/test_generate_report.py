@@ -1,5 +1,4 @@
 import sys
-import sys
 import tempfile
 import types
 import unittest
