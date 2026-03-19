@@ -8,3 +8,4 @@ data/demo_portfolio.db
 data/portfolio_backup_*.db
 data/reports/
 .crewai_storage/
+logs/
