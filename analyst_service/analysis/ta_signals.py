@@ -21,6 +21,8 @@ class TechnicalAnalysis:
         self.macd_signal = 9
         self.ema_short = 20
         self.ema_long = 50
+        self.sma_short = 50
+        self.sma_long = 200
 
         if config_path and os.path.exists(config_path):
             try:
@@ -34,6 +36,8 @@ class TechnicalAnalysis:
                 self.macd_signal = ta_settings.get("macd", {}).get("signal_period", self.macd_signal)
                 self.ema_short = ta_settings.get("ema", {}).get("short_period", self.ema_short)
                 self.ema_long = ta_settings.get("ema", {}).get("long_period", self.ema_long)
+                self.sma_short = ta_settings.get("sma", {}).get("short_period", self.sma_short)
+                self.sma_long = ta_settings.get("sma", {}).get("long_period", self.sma_long)
             except Exception:
                 # On any config error, fall back to defaults without failing.
                 pass
@@ -105,10 +109,38 @@ class TechnicalAnalysis:
             "crossover": short_ema - long_ema,
         }
 
+    def calculate_sma(self, prices: list) -> Dict[str, float]:
+        """Calculate Simple Moving Averages."""
+        if not prices:
+            return {"short_sma": 0.0, "long_sma": 0.0, "crossover": 0.0}
+
+        price_series = pd.Series(prices)
+        short_sma_series = price_series.rolling(window=self.sma_short).mean()
+        long_sma_series = price_series.rolling(window=self.sma_long).mean()
+
+        if short_sma_series.empty or long_sma_series.empty:
+            return {"short_sma": 0.0, "long_sma": 0.0, "crossover": 0.0}
+
+        short_sma = short_sma_series.iloc[-1]
+        long_sma = long_sma_series.iloc[-1]
+
+        if pd.isna(short_sma) or pd.isna(long_sma):
+            return {"short_sma": 0.0, "long_sma": 0.0, "crossover": 0.0}
+
+        short_sma = float(short_sma)
+        long_sma = float(long_sma)
+
+        return {
+            "short_sma": short_sma,
+            "long_sma": long_sma,
+            "crossover": short_sma - long_sma,
+        }
+
     def get_signals(self, prices: list) -> Dict[str, Any]:
         """Get all technical signals."""
         return {
             "rsi": self.calculate_rsi(prices),
             "macd": self.calculate_macd(prices),
             "ema": self.calculate_ema(prices),
+            "sma": self.calculate_sma(prices),
         }

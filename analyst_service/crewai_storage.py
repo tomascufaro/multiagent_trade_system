@@ -7,12 +7,15 @@ def configure_crewai_storage() -> str:
     storage_dir = Path(__file__).resolve().parents[1] / ".crewai_storage"
     storage_dir.mkdir(parents=True, exist_ok=True)
 
-    from crewai.utilities import paths as crew_paths
-    from crewai.memory.storage import kickoff_task_outputs_storage as kickoff_storage
-    from crewai.memory.storage import ltm_sqlite_storage as ltm_storage
-    from crewai.memory.storage import rag_storage as rag_storage_module
-    from crewai.knowledge.storage import knowledge_storage as knowledge_storage_module
-    from crewai.flow.persistence import sqlite as flow_sqlite_module
+    try:
+        from crewai.utilities import paths as crew_paths
+        from crewai.memory.storage import kickoff_task_outputs_storage as kickoff_storage
+        from crewai.memory.storage import ltm_sqlite_storage as ltm_storage
+        from crewai.memory.storage import rag_storage as rag_storage_module
+        from crewai.knowledge.storage import knowledge_storage as knowledge_storage_module
+        from crewai.flow.persistence import sqlite as flow_sqlite_module
+    except Exception:
+        return str(storage_dir)
 
     def _storage_path() -> str:
         return str(storage_dir)
