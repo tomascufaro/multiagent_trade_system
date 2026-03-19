@@ -2,10 +2,12 @@
 from typing import Dict, Any
 
 from crewai import Agent, Task, Crew, Process
+from ..crewai_storage import configure_crewai_storage
 
 
 class ReportWriter:
     def __init__(self, model: str = "gpt-4.1-nano"):
+        configure_crewai_storage()
         self.agent = Agent(
             role="Portfolio Report Writer",
             goal=(
@@ -91,4 +93,3 @@ Market bias: {market_bias}
             text = str(task_output)
 
         return text.strip()
-

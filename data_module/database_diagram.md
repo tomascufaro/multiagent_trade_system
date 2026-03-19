@@ -1,38 +1,16 @@
-# Portfolio Database Schema Diagram
+# Portfolio Database Schema
 
 ```mermaid
 erDiagram
-    portfolio_snapshots {
+    holdings {
         INTEGER id PK
-        TEXT timestamp
-        TEXT account_id
-        REAL total_equity
-        REAL cash
-        REAL invested_capital
-        REAL unrealized_pnl
-        REAL realized_pnl
-        REAL total_pnl
-        REAL day_change
-        REAL day_change_pct
-    }
-    
-    positions {
-        INTEGER id PK
-        TEXT timestamp
-        TEXT symbol
-        TEXT side
+        TEXT symbol UK
         REAL quantity
         REAL avg_entry_price
-        REAL current_price
-        REAL market_value
-        REAL cost_basis
-        REAL unrealized_pnl
-        REAL unrealized_pnl_pct
-        REAL position_size_pct
-        INTEGER days_held
         TEXT notes
+        TEXT updated_at
     }
-    
+
     trades {
         INTEGER id PK
         TEXT trade_id UK
@@ -51,15 +29,6 @@ erDiagram
         REAL realized_pnl
     }
 
-    holdings {
-        INTEGER id PK
-        TEXT symbol UK
-        REAL quantity
-        REAL avg_entry_price
-        TEXT notes
-        TEXT updated_at
-    }
-
     capital_flows {
         INTEGER id PK
         TEXT timestamp
@@ -67,24 +36,58 @@ erDiagram
         REAL amount
         TEXT notes
     }
-    
-    performance_metrics {
+
+    daily_prices {
+        INTEGER id PK
+        TEXT symbol
+        TEXT date
+        REAL close
+    }
+
+    asset_analysis {
+        INTEGER id PK
+        TEXT symbol
+        TEXT analysis_date
+        TEXT recommendation
+        REAL confidence_score
+        REAL current_price
+        TEXT analyst_notes
+        TEXT bull_case
+        TEXT bear_case
+        TEXT technical_signals
+    }
+
+    portfolio_snapshots {
         INTEGER id PK
         TEXT timestamp
-        TEXT period
-        REAL total_return
-        REAL total_return_pct
-        REAL sharpe_ratio
-        REAL max_drawdown
-        REAL win_rate
-        REAL avg_win
-        REAL avg_loss
-        REAL profit_factor
-        INTEGER total_trades
-        INTEGER winning_trades
-        INTEGER losing_trades
+        TEXT account_id
+        REAL total_equity
+        REAL cash
+        REAL invested_capital
+        REAL unrealized_pnl
+        REAL realized_pnl
+        REAL total_pnl
+        REAL day_change
+        REAL day_change_pct
     }
-    
+
+    positions {
+        INTEGER id PK
+        TEXT timestamp
+        TEXT symbol
+        TEXT side
+        REAL quantity
+        REAL avg_entry_price
+        REAL current_price
+        REAL market_value
+        REAL cost_basis
+        REAL unrealized_pnl
+        REAL unrealized_pnl_pct
+        REAL position_size_pct
+        INTEGER days_held
+        TEXT notes
+    }
+
     news_articles {
         TEXT id PK
         TEXT headline
@@ -97,12 +100,12 @@ erDiagram
         TEXT source
         TEXT saved_at
     }
-    
+
     news_symbols {
-        TEXT news_id PK,FK
+        TEXT news_id PK, FK
         TEXT symbol PK
     }
-    
+
     portfolio_universe {
         TEXT symbol PK
         TEXT first_seen
@@ -111,35 +114,22 @@ erDiagram
         INTEGER times_owned
         TEXT notes
     }
-    
-    %% Relationships
-    portfolio_snapshots ||--o{ positions : "has"
-    holdings ||--o{ trades : "generates"
-    portfolio_snapshots ||--o{ performance_metrics : "calculated_from"
-    news_articles ||--o{ news_symbols : "linked_to"
+
+    holdings ||..|| trades : "current state derived from"
+    holdings ||..o{ daily_prices : "valued by"
+    trades ||..o{ daily_prices : "priced against"
+    trades ||..o{ asset_analysis : "analyzed after entry or on demand"
+    portfolio_snapshots ||--o{ positions : "snapshot contains"
+    news_articles ||--o{ news_symbols : "mentions"
+    portfolio_universe ||..o{ trades : "tracks traded symbols"
+    portfolio_universe ||..o{ holdings : "tracks current holdings"
+    portfolio_universe ||..o{ news_symbols : "tracks symbols in news"
 ```
 
-## Table Descriptions
+## Notes
 
-### Core Portfolio Tables
-- **portfolio_snapshots**: Daily snapshots of overall portfolio performance
-- **positions**: Individual position details and performance tracking
-- **trades**: Record of all buy/sell transactions
-- **holdings**: Current open holdings (manual positions)
-- **capital_flows**: Deposits and withdrawals
-- **performance_metrics**: Calculated performance metrics by period
-
-### News Tables
-- **news_articles**: News articles fetched from Alpaca news API
-- **news_symbols**: Junction table linking articles to symbols (many-to-many)
-
-### Universe Tracking
-- **portfolio_universe**: Tracks all symbols that have been in the portfolio
-
-## Relationship Notes
-
-- `portfolio_snapshots` → `positions`: Linked via timestamp and account_id
-- `positions` → `trades`: Linked via symbol and timestamp
-- `portfolio_snapshots` → `performance_metrics`: Metrics calculated from snapshots
-- `news_articles` → `news_symbols`: Many-to-many relationship (articles can mention multiple symbols)
-- `portfolio_universe`: Standalone table tracking symbol metadata
+- `holdings` is the current-state table used by the dashboard and CLI for open positions.
+- `trades` and `capital_flows` are the source-of-truth event tables for manual portfolio activity.
+- `daily_prices` normalizes close-price history used for asset metrics, performance, and the equity curve.
+- `asset_analysis` stores AI analysis results, but the frontend does not currently preload the latest cached analysis.
+- `portfolio_snapshots` and `positions` are historical snapshots produced by `scripts/daily_snapshot.py`.

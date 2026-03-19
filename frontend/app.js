@@ -3,16 +3,22 @@ const formatMoney = (value) => {
   return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+const formatPct = (value) => {
+  if (value === null || value === undefined || Number.isNaN(value)) return '--';
+  return `${Number(value).toFixed(2)}%`;
+};
+
 const summaryEls = {
   totalEquity: document.getElementById('totalEquity'),
   totalPnl: document.getElementById('totalPnl'),
   netContributed: document.getElementById('netContributed'),
   numPositions: document.getElementById('numPositions'),
+  totalReturn: document.getElementById('totalReturn'),
+  maxDrawdown: document.getElementById('maxDrawdown'),
 };
 
-const positionsBody = document.querySelector('#positionsTable tbody');
-const tradesBody = document.querySelector('#tradesTable tbody');
-const analysisResult = document.getElementById('analysisResult');
+const metricsBody = document.querySelector('#metricsTable tbody');
+let equityChart = null;
 
 const fetchJson = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -34,104 +40,258 @@ const loadSummary = async () => {
   summaryEls.numPositions.textContent = summary.num_positions ?? 0;
 };
 
-const loadPositions = async () => {
-  const positions = await fetchJson('/api/positions');
-  positionsBody.innerHTML = '';
-  positions.forEach((pos) => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${pos.symbol}</td>
-      <td>${Number(pos.quantity).toFixed(2)}</td>
-      <td>${formatMoney(pos.avg_entry_price)}</td>
-      <td>${formatMoney(pos.current_price)}</td>
-      <td>${formatMoney(pos.market_value)}</td>
-      <td>${formatMoney(pos.unrealized_pnl)}</td>
-    `;
-    positionsBody.appendChild(row);
+const loadPerformance = async () => {
+  const perf = await fetchJson('/api/portfolio/performance');
+  summaryEls.totalReturn.textContent = formatPct(perf.total_return_pct ?? 0);
+  summaryEls.maxDrawdown.textContent = formatPct((perf.max_drawdown ?? 0) * 100);
+};
+
+const renderEquityChart = (points) => {
+  const ctx = document.getElementById('equityChart');
+  if (!ctx) return;
+
+  const labels = points.map((p) => p.date);
+  const values = points.map((p) => p.equity);
+
+  if (equityChart) {
+    equityChart.data.labels = labels;
+    equityChart.data.datasets[0].data = values;
+    equityChart.update();
+    return;
+  }
+
+  equityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Equity',
+          data: values,
+          borderColor: '#1b4d3e',
+          backgroundColor: 'rgba(27, 77, 62, 0.1)',
+          tension: 0.2,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+      },
+      scales: {
+        x: { display: true },
+        y: { display: true },
+      },
+    },
   });
 };
 
-const loadTrades = async () => {
-  const trades = await fetchJson('/api/trades');
-  tradesBody.innerHTML = '';
-  trades.forEach((trade) => {
+const loadEquityCurve = async () => {
+  const curve = await fetchJson('/api/portfolio/equity-curve?days=90');
+  renderEquityChart(curve);
+};
+
+const signalBadge = (signals) => {
+  const values = Object.values(signals || {});
+  const bull = values.filter((s) => s.signal === 'BULL').length;
+  const sell = values.filter((s) => s.signal === 'SELL').length;
+  const neutral = values.filter((s) => s.signal === 'NEUTRAL').length;
+  let cls = 'neutral';
+  if (bull > sell) cls = 'bull';
+  if (sell > bull) cls = 'sell';
+  return `<span class="badge ${cls}">${bull} Bull / ${sell} Sell / ${neutral} Neutral</span>`;
+};
+
+const renderMetrics = (metrics) => {
+  metricsBody.innerHTML = '';
+
+  metrics.forEach((item) => {
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td>${String(trade.timestamp).slice(0, 10)}</td>
-      <td>${trade.action}</td>
-      <td>${trade.symbol}</td>
-      <td>${Number(trade.quantity).toFixed(2)}</td>
-      <td>${formatMoney(trade.price)}</td>
-      <td>${formatMoney(trade.total_value)}</td>
-      <td>${formatMoney(trade.fees || 0)}</td>
+      <td>${item.symbol}</td>
+      <td>${formatMoney(item.price)}</td>
+      <td>${formatPct(item.position_pct)}</td>
+      <td>${formatMoney(item.unrealized_pnl)}</td>
+      <td>${signalBadge(item.signals)}</td>
+      <td><button class="btn small" data-analyze="${item.symbol}">Analyze</button></td>
+      <td><button class="expand-btn" data-expand="${item.symbol}">▾</button></td>
     `;
-    tradesBody.appendChild(row);
+
+    const detail = document.createElement('tr');
+    detail.className = 'detail-row hidden';
+    detail.setAttribute('data-detail', item.symbol);
+    detail.innerHTML = `
+      <td colspan="7">
+        <div class="detail-grid">
+          <div class="detail-item"><strong>RSI</strong>${formatPct(item.signals?.rsi?.value)}</div>
+          <div class="detail-item"><strong>MACD</strong>${item.signals?.macd?.value?.toFixed?.(3) ?? '--'}</div>
+          <div class="detail-item"><strong>SMA50/200</strong>${item.signals?.sma50_200?.signal ?? 'N/A'}</div>
+          <div class="detail-item"><strong>EMA20</strong>${item.signals?.ema20?.signal ?? '--'}</div>
+          <div class="detail-item"><strong>EMA50</strong>${item.signals?.ema50?.signal ?? '--'}</div>
+          <div class="detail-item"><strong>7d Return</strong>${formatPct(item.returns_7d)}</div>
+          <div class="detail-item"><strong>30d Return</strong>${formatPct(item.returns_30d)}</div>
+          <div class="detail-item"><strong>Volatility</strong>${formatPct(item.volatility_90d)}</div>
+          <div class="detail-item"><strong>Drawdown</strong>${formatPct(item.drawdown_30d)}</div>
+          <div class="detail-item"><strong>Realized P&L</strong>${formatMoney(item.realized_pnl)}</div>
+          <div class="detail-item"><strong>AI Summary</strong><div id="analysis-${item.symbol}" class="muted">Not analyzed</div></div>
+        </div>
+      </td>
+    `;
+
+    metricsBody.appendChild(row);
+    metricsBody.appendChild(detail);
+  });
+};
+
+const loadMetrics = async () => {
+  const metrics = await fetchJson('/api/portfolio/asset-metrics?days=90');
+  renderMetrics(metrics);
+  const cachedAnalyses = await fetchJson('/api/analysis/latest');
+  Object.entries(cachedAnalyses || {}).forEach(([symbol, analysis]) => {
+    const target = document.getElementById(`analysis-${symbol}`);
+    if (!target) return;
+    target.textContent = `${analysis.recommendation}: ${analysis.analyst_notes || ''}`;
   });
 };
 
 const refreshAll = async () => {
   try {
-    await Promise.all([loadSummary(), loadPositions(), loadTrades()]);
+    await Promise.all([loadSummary(), loadPerformance(), loadEquityCurve(), loadMetrics()]);
   } catch (error) {
     alert(`Error: ${error.message}`);
   }
 };
 
+metricsBody.addEventListener('click', async (event) => {
+  const expandBtn = event.target.closest('[data-expand]');
+  if (expandBtn) {
+    const symbol = expandBtn.getAttribute('data-expand');
+    const detail = document.querySelector(`[data-detail="${symbol}"]`);
+    detail.classList.toggle('hidden');
+    expandBtn.textContent = detail.classList.contains('hidden') ? '▾' : '▴';
+    return;
+  }
+
+  const analyzeBtn = event.target.closest('[data-analyze]');
+  if (analyzeBtn) {
+    const symbol = analyzeBtn.getAttribute('data-analyze');
+    const target = document.getElementById(`analysis-${symbol}`);
+    if (target) target.textContent = 'Analyzing...';
+    try {
+      const result = await fetchJson(`/api/analysis/${symbol}`, { method: 'POST' });
+      if (target) {
+        target.textContent = `${result.recommendation}: ${result.analyst_notes || ''}`;
+      }
+    } catch (error) {
+      if (target) target.textContent = `Error: ${error.message}`;
+    }
+  }
+});
+
+// Modal logic
+const modal = document.getElementById('transactionModal');
+const openModalBtn = document.getElementById('addTransaction');
+const closeTargets = modal.querySelectorAll('[data-close]');
+const tabs = modal.querySelectorAll('.tab');
+const forms = modal.querySelectorAll('form[data-form]');
+
+const openModal = () => {
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+};
+
+const closeModal = () => {
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+};
+
+openModalBtn.addEventListener('click', openModal);
+closeTargets.forEach((el) => el.addEventListener('click', closeModal));
+
+const showForm = (name) => {
+  forms.forEach((form) => form.classList.toggle('hidden', form.dataset.form !== name));
+  tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
+};
+
+tabs.forEach((tab) => {
+  tab.addEventListener('click', () => showForm(tab.dataset.tab));
+});
+
+const submitFlow = async (type, amount, notes) => {
+  await fetchJson(`/api/${type}`, {
+    method: 'POST',
+    body: JSON.stringify({ amount, notes }),
+  });
+};
+
+const submitTrade = async (action, payload) => {
+  await fetchJson('/api/trades', {
+    method: 'POST',
+    body: JSON.stringify({ action, ...payload }),
+  });
+};
+
 const flowForm = document.getElementById('flowForm');
 flowForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const type = document.getElementById('flowType').value;
-  const amount = Number(document.getElementById('flowAmount').value);
-  const notes = document.getElementById('flowNotes').value || null;
-
   try {
-    await fetchJson(`/api/${type}`, {
-      method: 'POST',
-      body: JSON.stringify({ amount, notes }),
-    });
+    await submitFlow('deposit', Number(flowForm.querySelector('#flowAmount').value), flowForm.querySelector('#flowNotes').value || null);
     flowForm.reset();
+    closeModal();
     await refreshAll();
   } catch (error) {
     alert(`Error: ${error.message}`);
   }
 });
 
-const tradeForm = document.getElementById('tradeForm');
-tradeForm.addEventListener('submit', async (event) => {
+const withdrawForm = document.getElementById('withdrawForm');
+withdrawForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const payload = {
-    action: document.getElementById('tradeAction').value,
-    symbol: document.getElementById('tradeSymbol').value,
-    quantity: Number(document.getElementById('tradeQuantity').value),
-    price: Number(document.getElementById('tradePrice').value),
-    fees: Number(document.getElementById('tradeFees').value || 0),
-    notes: document.getElementById('tradeNotes').value || null,
-  };
-
   try {
-    await fetchJson('/api/trades', {
-      method: 'POST',
-      body: JSON.stringify(payload),
+    await submitFlow('withdraw', Number(withdrawForm.querySelector('#withdrawAmount').value), withdrawForm.querySelector('#withdrawNotes').value || null);
+    withdrawForm.reset();
+    closeModal();
+    await refreshAll();
+  } catch (error) {
+    alert(`Error: ${error.message}`);
+  }
+});
+
+const buyForm = document.getElementById('buyForm');
+buyForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    await submitTrade('BUY', {
+      symbol: buyForm.querySelector('#buySymbol').value,
+      quantity: Number(buyForm.querySelector('#buyQuantity').value),
+      price: Number(buyForm.querySelector('#buyPrice').value),
+      fees: Number(buyForm.querySelector('#buyFees').value || 0),
+      notes: buyForm.querySelector('#buyNotes').value || null,
     });
-    tradeForm.reset();
+    buyForm.reset();
+    closeModal();
     await refreshAll();
   } catch (error) {
     alert(`Error: ${error.message}`);
   }
 });
 
-const analysisForm = document.getElementById('analysisForm');
-analysisForm.addEventListener('submit', async (event) => {
+const sellForm = document.getElementById('sellForm');
+sellForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const symbol = document.getElementById('analysisSymbol').value.trim();
-  if (!symbol) return;
-
-  analysisResult.textContent = 'Analyzing...';
   try {
-    const data = await fetchJson(`/api/analysis/${symbol}`, { method: 'POST' });
-    analysisResult.textContent = JSON.stringify(data, null, 2);
+    await submitTrade('SELL', {
+      symbol: sellForm.querySelector('#sellSymbol').value,
+      quantity: Number(sellForm.querySelector('#sellQuantity').value),
+      price: Number(sellForm.querySelector('#sellPrice').value),
+      fees: Number(sellForm.querySelector('#sellFees').value || 0),
+      notes: sellForm.querySelector('#sellNotes').value || null,
+    });
+    sellForm.reset();
+    closeModal();
+    await refreshAll();
   } catch (error) {
-    analysisResult.textContent = `Error: ${error.message}`;
+    alert(`Error: ${error.message}`);
   }
 });
 

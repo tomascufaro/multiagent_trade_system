@@ -4,8 +4,9 @@ Data Manager - Orchestration layer for analyst service data operations
 Coordinates between API clients and data repositories, contains business logic.
 """
 import os
+import math
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Any, Set, Optional
 
 from data_module.api_clients import PriceFeed, NewsFeed
@@ -48,7 +49,7 @@ class DataManager:
         holdings = self.portfolio_repo.get_holdings()
         for pos in holdings:
             if pos.get('symbol') == symbol:
-                current_price = self.price_feed.get_current_price(symbol)
+                current_price = self._get_current_or_latest_price(symbol)
                 market_value = (pos.get('quantity') or 0) * (current_price or 0)
                 return {
                     'symbol': pos.get('symbol'),
@@ -151,28 +152,44 @@ class DataManager:
         self.portfolio_repo.save_positions(positions)
 
     def calculate_performance_metrics(self, period: str = 'all_time') -> Dict[str, Any]:
-        """Calculate portfolio performance metrics (business logic)"""
-        df = self.portfolio_repo.get_history(days=365 if period == 'all_time' else 30)
-
-        if df.empty:
+        """Calculate portfolio performance metrics from the equity curve."""
+        days = 365 if period == 'all_time' else 30
+        curve = self.compute_equity_curve(days)
+        if not curve:
             return {}
 
-        df['returns'] = df['total_equity'].pct_change()
-        df['cumulative_returns'] = (1 + df['returns']).cumprod() - 1
+        equities = [point['equity'] for point in curve]
+        returns = []
+        for i in range(1, len(equities)):
+            prev = equities[i - 1]
+            curr = equities[i]
+            if prev == 0:
+                continue
+            returns.append((curr / prev) - 1)
 
-        total_return = df['cumulative_returns'].iloc[-1] if not df.empty else 0
-        sharpe_ratio = df['returns'].mean() / df['returns'].std() * (252 ** 0.5) if df['returns'].std() > 0 else 0
+        if not returns:
+            return {}
 
-        df['peak'] = df['total_equity'].cummax()
-        df['drawdown'] = (df['total_equity'] - df['peak']) / df['peak']
-        max_drawdown = df['drawdown'].min()
+        cumulative = (equities[-1] / equities[0] - 1) if equities[0] else 0
+        mean = sum(returns) / len(returns)
+        variance = sum((r - mean) ** 2 for r in returns) / len(returns)
+        volatility = math.sqrt(variance) * math.sqrt(252)
+        sharpe_ratio = (mean / math.sqrt(variance)) * math.sqrt(252) if variance > 0 else 0
+
+        peak = equities[0]
+        max_drawdown = 0.0
+        for value in equities:
+            if value > peak:
+                peak = value
+            drawdown = (value - peak) / peak if peak else 0
+            max_drawdown = min(max_drawdown, drawdown)
 
         return {
-            'total_return': total_return,
-            'total_return_pct': total_return * 100,
+            'total_return': cumulative,
+            'total_return_pct': cumulative * 100,
             'sharpe_ratio': sharpe_ratio,
             'max_drawdown': max_drawdown,
-            'volatility': df['returns'].std() * (252 ** 0.5)
+            'volatility': volatility,
         }
 
     def get_portfolio_history(self, days: int = 30) -> pd.DataFrame:
@@ -363,6 +380,9 @@ class DataManager:
         net_contributed = capital['deposits'] - capital['withdrawals']
 
         positions = self.portfolio_repo.get_holdings()
+        latest_daily_prices = self.portfolio_repo.get_latest_daily_prices(
+            [pos['symbol'] for pos in positions if pos.get('symbol')]
+        )
 
         positions_value = 0.0
         positions_data = []
@@ -372,7 +392,7 @@ class DataManager:
             quantity = pos['quantity']
             avg_entry_price = pos['avg_entry_price']
 
-            current_price = self.price_feed.get_current_price(symbol)
+            current_price = self._get_current_or_latest_price(symbol, latest_daily_prices)
 
             market_value = quantity * (current_price or 0)
             cost_basis = quantity * avg_entry_price
@@ -411,14 +431,337 @@ class DataManager:
     def get_open_positions(self) -> List[Dict[str, Any]]:
         """Get all holdings with current prices."""
         positions = self.portfolio_repo.get_holdings()
+        latest_daily_prices = self.portfolio_repo.get_latest_daily_prices(
+            [pos['symbol'] for pos in positions if pos.get('symbol')]
+        )
 
         for pos in positions:
             symbol = pos['symbol']
-            pos['current_price'] = self.price_feed.get_current_price(symbol)
+            pos['current_price'] = self._get_current_or_latest_price(symbol, latest_daily_prices)
             pos['market_value'] = pos['quantity'] * (pos['current_price'] or 0)
             pos['unrealized_pnl'] = pos['market_value'] - (pos['quantity'] * pos['avg_entry_price'])
 
         return positions
+
+    def collect_daily_prices(self, symbols: Optional[List[str]] = None) -> int:
+        """Collect latest daily prices for symbols and persist to DB."""
+        if symbols is None:
+            symbols = sorted(
+                set(self.portfolio_repo.get_holding_symbols())
+                | set(self.portfolio_repo.get_trade_symbols())
+            )
+
+        if not symbols:
+            return 0
+
+        price_rows: List[Dict[str, Any]] = []
+        for symbol in symbols:
+            bars = self.price_feed.get_historical_data(
+                symbol, timeframe="1D", limit=1, days_back=5
+            )
+            if not bars:
+                continue
+            bar = bars[0]
+            timestamp = str(bar.get("timestamp", ""))[:10]
+            if not timestamp:
+                continue
+            price_rows.append(
+                {"symbol": symbol, "date": timestamp, "close": float(bar.get("close", 0))}
+            )
+
+        return self.portfolio_repo.save_daily_prices(price_rows)
+
+    def backfill_daily_prices(self, days_back: int = 365) -> int:
+        """Backfill daily prices for all symbols (idempotent)."""
+        symbols = sorted(
+            set(self.portfolio_repo.get_holding_symbols())
+            | set(self.portfolio_repo.get_trade_symbols())
+        )
+        if not symbols:
+            return 0
+
+        total_inserted = 0
+        for symbol in symbols:
+            bars = self.price_feed.get_historical_data(
+                symbol, timeframe="1D", limit=1000, days_back=days_back
+            )
+            if not bars:
+                continue
+            price_rows: List[Dict[str, Any]] = []
+            for bar in bars:
+                timestamp = str(bar.get("timestamp", ""))[:10]
+                if not timestamp:
+                    continue
+                price_rows.append(
+                    {
+                        "symbol": symbol,
+                        "date": timestamp,
+                        "close": float(bar.get("close", 0)),
+                    }
+                )
+            total_inserted += self.portfolio_repo.save_daily_prices(price_rows)
+
+        return total_inserted
+
+    def compute_asset_metrics(self, days: int = 90) -> List[Dict[str, Any]]:
+        """Compute per-asset metrics and signals from daily prices."""
+        from analyst_service.analysis.ta_signals import TechnicalAnalysis
+
+        holdings = self.portfolio_repo.get_holdings()
+        if not holdings:
+            return []
+
+        symbols = [h["symbol"] for h in holdings if h.get("symbol")]
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days + 5)
+        prices_by_symbol = self.portfolio_repo.get_daily_prices(
+            symbols, start_date.isoformat(), end_date.isoformat()
+        )
+
+        ta = TechnicalAnalysis(self.config_path)
+        realized_by_symbol = self.portfolio_repo.get_realized_pnl_by_symbol()
+        total_equity = self.get_portfolio_value().get("total_equity", 0) or 0
+
+        results: List[Dict[str, Any]] = []
+        for holding in holdings:
+            symbol = holding.get("symbol")
+            if not symbol:
+                continue
+
+            rows = prices_by_symbol.get(symbol, [])
+            closes = [float(r["close"]) for r in rows]
+
+            latest_close = closes[-1] if closes else self.price_feed.get_current_price(symbol)
+            if latest_close is None:
+                latest_close = 0.0
+
+            returns_7d = self._pct_return(closes, 7)
+            returns_30d = self._pct_return(closes, 30)
+            volatility_90d = self._volatility(closes, 90)
+            drawdown_30d = self._max_drawdown(closes, 30)
+
+            ta_signals = ta.get_signals(closes) if closes else {}
+            signal_flags = self._classify_signals(ta_signals, latest_close)
+
+            qty = float(holding.get("quantity") or 0)
+            avg_entry = float(holding.get("avg_entry_price") or 0)
+            market_value = qty * float(latest_close or 0)
+            unrealized_pnl = market_value - (qty * avg_entry)
+            realized_pnl = realized_by_symbol.get(symbol, 0.0)
+            weight_pct = (market_value / total_equity * 100) if total_equity > 0 else 0.0
+
+            results.append(
+                {
+                    "symbol": symbol,
+                    "price": latest_close,
+                    "returns_7d": returns_7d,
+                    "returns_30d": returns_30d,
+                    "volatility_90d": volatility_90d,
+                    "drawdown_30d": drawdown_30d,
+                    "position_pct": weight_pct,
+                    "unrealized_pnl": unrealized_pnl,
+                    "realized_pnl": realized_pnl,
+                    "signals": signal_flags,
+                    "raw_signals": ta_signals,
+                }
+            )
+
+        return results
+
+    def compute_equity_curve(self, days: int = 90) -> List[Dict[str, Any]]:
+        """Compute equity curve from trades, capital flows, and daily prices."""
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days)
+
+        trades = self.portfolio_repo.get_all_trades()
+        flows = self.portfolio_repo.get_capital_flows()
+
+        # Load daily prices for all symbols in trades/holdings
+        symbols = sorted(
+            set(self.portfolio_repo.get_holding_symbols())
+            | set(self.portfolio_repo.get_trade_symbols())
+        )
+        prices_by_symbol = self.portfolio_repo.get_daily_prices(
+            symbols, start_date.isoformat(), end_date.isoformat()
+        )
+
+        # Build a date index from daily_prices
+        all_dates = set()
+        for rows in prices_by_symbol.values():
+            for row in rows:
+                all_dates.add(row["date"])
+        date_list = sorted(all_dates)
+
+        holdings: Dict[str, float] = {}
+        cash = 0.0
+
+        # Organize trades by date
+        trades_by_date: Dict[str, List[Dict[str, Any]]] = {}
+        for trade in trades:
+            ts = str(trade.get("timestamp", ""))[:10]
+            trades_by_date.setdefault(ts, []).append(trade)
+
+        flows_by_date: Dict[str, List[Dict[str, Any]]] = {}
+        for flow in flows:
+            ts = str(flow.get("timestamp", ""))[:10]
+            flows_by_date.setdefault(ts, []).append(flow)
+
+        # Apply events before the start date to initialize state
+        for date in sorted(set(trades_by_date.keys()) | set(flows_by_date.keys())):
+            if date >= start_date.isoformat():
+                continue
+            for flow in flows_by_date.get(date, []):
+                amount = float(flow.get("amount") or 0)
+                if flow.get("type") == "DEPOSIT":
+                    cash += amount
+                elif flow.get("type") == "WITHDRAWAL":
+                    cash -= amount
+            for trade in trades_by_date.get(date, []):
+                symbol = trade.get("symbol")
+                qty = float(trade.get("quantity") or 0)
+                price = float(trade.get("price") or 0)
+                fees = float(trade.get("fees") or 0)
+                action = trade.get("action")
+                if action == "BUY":
+                    cash -= (qty * price + fees)
+                    holdings[symbol] = holdings.get(symbol, 0) + qty
+                elif action == "SELL":
+                    cash += (qty * price - fees)
+                    holdings[symbol] = holdings.get(symbol, 0) - qty
+
+        equity_curve: List[Dict[str, Any]] = []
+        for date in date_list:
+            if date < start_date.isoformat():
+                continue
+            # Apply trades for the day
+            for flow in flows_by_date.get(date, []):
+                amount = float(flow.get("amount") or 0)
+                if flow.get("type") == "DEPOSIT":
+                    cash += amount
+                elif flow.get("type") == "WITHDRAWAL":
+                    cash -= amount
+
+            for trade in trades_by_date.get(date, []):
+                symbol = trade.get("symbol")
+                qty = float(trade.get("quantity") or 0)
+                price = float(trade.get("price") or 0)
+                fees = float(trade.get("fees") or 0)
+                action = trade.get("action")
+
+                if action == "BUY":
+                    cash -= (qty * price + fees)
+                    holdings[symbol] = holdings.get(symbol, 0) + qty
+                elif action == "SELL":
+                    cash += (qty * price - fees)
+                    holdings[symbol] = holdings.get(symbol, 0) - qty
+
+            # Compute equity using daily close
+            total_value = cash
+            for symbol, qty in holdings.items():
+                if qty == 0:
+                    continue
+                rows = prices_by_symbol.get(symbol, [])
+                close_map = {r["date"]: r["close"] for r in rows}
+                price = close_map.get(date)
+                if price is None:
+                    continue
+                total_value += qty * float(price)
+
+            equity_curve.append({"date": date, "equity": total_value})
+
+        return equity_curve
+
+    def _pct_return(self, closes: List[float], days: int) -> float:
+        if len(closes) <= days:
+            return 0.0
+        start = closes[-(days + 1)]
+        end = closes[-1]
+        if start == 0:
+            return 0.0
+        return (end / start - 1) * 100
+
+    def _volatility(self, closes: List[float], days: int) -> float:
+        if len(closes) <= days:
+            return 0.0
+        slice_closes = closes[-days:]
+        returns = []
+        for i in range(1, len(slice_closes)):
+            prev = slice_closes[i - 1]
+            curr = slice_closes[i]
+            if prev == 0:
+                continue
+            returns.append((curr / prev) - 1)
+        if not returns:
+            return 0.0
+        mean = sum(returns) / len(returns)
+        variance = sum((r - mean) ** 2 for r in returns) / len(returns)
+        return math.sqrt(variance) * math.sqrt(252) * 100
+
+    def _max_drawdown(self, closes: List[float], days: int) -> float:
+        if len(closes) <= days:
+            return 0.0
+        slice_closes = closes[-days:]
+        peak = slice_closes[0]
+        max_dd = 0.0
+        for price in slice_closes:
+            if price > peak:
+                peak = price
+            dd = (price - peak) / peak if peak else 0
+            max_dd = min(max_dd, dd)
+        return max_dd * 100
+
+    def _classify_signals(self, ta_signals: Dict[str, Any], price: float) -> Dict[str, Any]:
+        rsi = ta_signals.get("rsi", 0.0)
+        macd = ta_signals.get("macd", {})
+        ema = ta_signals.get("ema", {})
+        sma = ta_signals.get("sma", {})
+
+        signals = {}
+
+        if rsi >= 70:
+            signals["rsi"] = {"value": rsi, "signal": "SELL"}
+        elif rsi <= 30 and rsi > 0:
+            signals["rsi"] = {"value": rsi, "signal": "BULL"}
+        else:
+            signals["rsi"] = {"value": rsi, "signal": "NEUTRAL"}
+
+        macd_val = macd.get("macd", 0.0)
+        macd_sig = macd.get("signal", 0.0)
+        if macd_val > macd_sig:
+            signals["macd"] = {"value": macd_val, "signal": "BULL"}
+        elif macd_val < macd_sig:
+            signals["macd"] = {"value": macd_val, "signal": "SELL"}
+        else:
+            signals["macd"] = {"value": macd_val, "signal": "NEUTRAL"}
+
+        ema_short = ema.get("short_ema", 0.0)
+        ema_long = ema.get("long_ema", 0.0)
+        if price > ema_short:
+            signals["ema20"] = {"value": ema_short, "signal": "BULL"}
+        elif price < ema_short:
+            signals["ema20"] = {"value": ema_short, "signal": "SELL"}
+        else:
+            signals["ema20"] = {"value": ema_short, "signal": "NEUTRAL"}
+
+        if price > ema_long:
+            signals["ema50"] = {"value": ema_long, "signal": "BULL"}
+        elif price < ema_long:
+            signals["ema50"] = {"value": ema_long, "signal": "SELL"}
+        else:
+            signals["ema50"] = {"value": ema_long, "signal": "NEUTRAL"}
+
+        sma_short = sma.get("short_sma", 0.0)
+        sma_long = sma.get("long_sma", 0.0)
+        if sma_short == 0.0 or sma_long == 0.0:
+            signals["sma50_200"] = {"value": sma_short - sma_long, "signal": "N/A"}
+        elif sma_short > sma_long:
+            signals["sma50_200"] = {"value": sma_short - sma_long, "signal": "BULL"}
+        elif sma_short < sma_long:
+            signals["sma50_200"] = {"value": sma_short - sma_long, "signal": "SELL"}
+        else:
+            signals["sma50_200"] = {"value": sma_short - sma_long, "signal": "NEUTRAL"}
+
+        return signals
 
     def analyze_stock(self, symbol: str) -> Dict[str, Any]:
         """Analyze a stock using existing AnalystService."""
@@ -443,7 +786,7 @@ class DataManager:
             'analysis_date': datetime.now().isoformat(),
             'recommendation': recommendation,
             'confidence_score': debate.get('confidence', 0.5),
-            'current_price': self.price_feed.get_current_price(symbol),
+            'current_price': self._get_current_or_latest_price(symbol),
             'analyst_notes': summary,
             'bull_case': debate.get('bull_perspective', ''),
             'bear_case': debate.get('bear_perspective', ''),
@@ -461,6 +804,23 @@ class DataManager:
             if pos['symbol'] == symbol:
                 return pos
         return None
+
+    def _get_current_or_latest_price(
+        self,
+        symbol: str,
+        latest_daily_prices: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> float:
+        """Use live price when available, otherwise fall back to the latest stored close."""
+        if self.price_feed.api_key and self.price_feed.secret_key:
+            live_price = self.price_feed.get_current_price(symbol)
+            if live_price is not None:
+                return float(live_price)
+
+        latest_daily_prices = latest_daily_prices or self.portfolio_repo.get_latest_daily_prices([symbol])
+        latest = latest_daily_prices.get(symbol) if latest_daily_prices else None
+        if latest is None:
+            return 0.0
+        return float(latest.get("close") or 0.0)
 
     def _update_holding_after_buy(self, symbol: str, quantity: float, price: float):
         """Update or create holding after buy."""

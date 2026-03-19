@@ -6,11 +6,13 @@ from .bear_agent import BearAgent
 
 from shared.models import MarketAnalysis, AgentAnalysis
 from ..data_context import build_analysis_context
+from ..crewai_storage import configure_crewai_storage
 from data_module.data_manager import DataManager
 
 class TradingCrew:
     def __init__(self, config_path: str = 'analyst_service/config/settings.yaml'):
         """Initialize the trading crew with bull and bear agents and data access."""
+        configure_crewai_storage()
         self.bull_agent = BullAgent()
         self.bear_agent = BearAgent()
         self.data_manager = DataManager(config_path)

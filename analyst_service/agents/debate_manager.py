@@ -7,6 +7,7 @@ from crewai import Crew, Process
 from .trading_crew import TradingCrew
 from .bull_agent import BullAgent
 from .bear_agent import BearAgent
+from ..crewai_storage import configure_crewai_storage
 
 from shared.models import MarketAnalysis, AgentAnalysis
 
@@ -45,6 +46,7 @@ class DebateManager:
             Dictionary containing both perspectives and overall portfolio bias.
         """
         # For portfolio-level debates we deliberately disable tools (no TA calls).
+        configure_crewai_storage()
         bull_agent = BullAgent(use_tools=False)
         bear_agent = BearAgent(use_tools=False)
 
