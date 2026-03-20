@@ -767,30 +767,72 @@ class DataManager:
         """Analyze a stock using existing AnalystService."""
         from analyst_service.analysis.analyst_service import AnalystService
 
-        analyst = AnalystService(self.config_path)
-        analysis = analyst.analyze(symbol)
+        symbol = symbol.upper()
 
-        debate = analysis.get('debate', {})
-        summary = debate.get('summary', '')
+        try:
+            analyst = AnalystService(self.config_path)
+            analysis = analyst.analyze(symbol)
+            debate = analysis.get('debate', {})
+            summary = debate.get('summary', '')
 
-        recommendation = 'HOLD'
-        if 'strong buy' in summary.lower() or 'strongly recommend buying' in summary.lower():
-            recommendation = 'STRONG_BUY'
-        elif 'buy' in summary.lower() or 'bullish' in summary.lower():
-            recommendation = 'BUY'
-        elif 'sell' in summary.lower() or 'bearish' in summary.lower():
-            recommendation = 'SELL'
+            recommendation = 'HOLD'
+            if 'strong buy' in summary.lower() or 'strongly recommend buying' in summary.lower():
+                recommendation = 'STRONG_BUY'
+            elif 'buy' in summary.lower() or 'bullish' in summary.lower():
+                recommendation = 'BUY'
+            elif 'sell' in summary.lower() or 'bearish' in summary.lower():
+                recommendation = 'SELL'
+
+            confidence = debate.get('confidence', 0.5)
+            bull_case = debate.get('bull_perspective', '')
+            bear_case = debate.get('bear_perspective', '')
+            technical_signals = analysis.get('ta_signals', {})
+            analyst_notes = summary
+        except Exception as exc:
+            market_data = self.get_market_data(symbol)
+            historical = market_data.get("historical_data") or []
+            closes = [bar["close"] for bar in historical if "close" in bar]
+
+            ta_data = {}
+            signal_flags = {}
+            if closes:
+                from analyst_service.analysis.ta_signals import TechnicalAnalysis
+
+                ta = TechnicalAnalysis(self.config_path)
+                ta_data = ta.get_signals(closes)
+                latest_close = closes[-1]
+                signal_flags = self._classify_signals(ta_data, latest_close)
+
+            bull_votes = sum(1 for value in signal_flags.values() if value.get("signal") == "BULL")
+            sell_votes = sum(1 for value in signal_flags.values() if value.get("signal") == "SELL")
+            confidence = 0.5
+            recommendation = "HOLD"
+            if bull_votes > sell_votes:
+                recommendation = "BUY"
+                confidence = min(0.9, 0.5 + (bull_votes - sell_votes) * 0.1)
+            elif sell_votes > bull_votes:
+                recommendation = "SELL"
+                confidence = min(0.9, 0.5 + (sell_votes - bull_votes) * 0.1)
+
+            analyst_notes = (
+                "Fallback analysis generated from technical indicators because AI debate "
+                f"service was unavailable ({type(exc).__name__})."
+            )
+            bull_case = f"Bullish signals: {bull_votes}"
+            bear_case = f"Bearish signals: {sell_votes}"
+            technical_signals = ta_data
+
 
         analysis_record = {
             'symbol': symbol,
             'analysis_date': datetime.now().isoformat(),
             'recommendation': recommendation,
-            'confidence_score': debate.get('confidence', 0.5),
+            'confidence_score': confidence,
             'current_price': self._get_current_or_latest_price(symbol),
-            'analyst_notes': summary,
-            'bull_case': debate.get('bull_perspective', ''),
-            'bear_case': debate.get('bear_perspective', ''),
-            'technical_signals': str(analysis.get('ta_signals', {}))
+            'analyst_notes': analyst_notes,
+            'bull_case': bull_case,
+            'bear_case': bear_case,
+            'technical_signals': str(technical_signals)
         }
 
         self.portfolio_repo.save_asset_analysis(analysis_record)
