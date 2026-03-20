@@ -100,7 +100,7 @@ def withdraw(flow: CapitalFlowCreate):
 
 @app.post("/api/analysis/{symbol}")
 def analyze(symbol: str):
-    return _dm.analyze_stock(symbol)
+    return _dm.analyze_stock(symbol.upper())
 
 
 @app.get("/api/analysis/latest")
